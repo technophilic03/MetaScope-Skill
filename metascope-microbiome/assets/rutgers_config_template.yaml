@@ -1,0 +1,52 @@
+# Rutgers HPC site config for the metascope-microbiome skill — OPTIONAL CACHE.
+#
+# This file is NOT required. The skill collects these values interactively
+# at run time (see SKILL.md "Step 2: Configure Rutgers settings"). After the
+# first session, the skill offers to write the user's answers here so future
+# runs can reuse them — pass `--rutgers-config ~/.config/metascope-microbiome/rutgers.yaml`
+# to render_submission.py, and individual values can still be overridden with
+# `--account`, `--partition`, etc.
+#
+# If you DO populate this template by hand: replace every <PLACEHOLDER>.
+# Any `<...>` marker still present at render time is reported as an error.
+#
+# See references/rutgers-hpc.md for what each field means and where to find it.
+
+# -- SLURM scheduler ---------------------------------------------------------
+account:           ~                             # Optional on Amarel; many groups don't use one. Set to your account if needed (check with `sshare -U`).
+partition:         "<partition-name>"            # Amarel options: main, gpu, mem, nonpre, graphical (confirm via `sinfo`)
+default_time:      "<HH:MM:SS>"                  # e.g. 12:00:00 (or D-HH:MM:SS for multi-day; Amarel default 3-00:00:00)
+default_mem:       "<e.g. 64G>"
+default_cpus:      "<e.g. 16>"
+
+# -- Module environment ------------------------------------------------------
+# Multi-line list. Confirm names with `module avail <prefix>`.
+# Common needs: nextflow, java, singularity OR apptainer, sratoolkit.
+module_loads: |
+  module load <nextflow-module>
+  module load <java-module>
+  module load <singularity-or-apptainer-module>
+  module load <sratoolkit-module>
+
+# -- Nextflow ----------------------------------------------------------------
+# nf-core profile string. Confirm Rutgers' convention; common values:
+#   "singularity,slurm", "apptainer,slurm", or an institutional profile name.
+nextflow_profile:  "<nf-core-profile>"
+
+# What goes into `nextflow run <pipeline_ref> ...` inside the submission script.
+# Examples (in order of preference):
+#   "nf-core/metascopeprolifer"                   # canonical nf-core shorthand (once published; verify with `nextflow pull`)
+#   "hjfan527/nf-core-metascopeprolifer"          # direct GitHub ref — works today
+#   "hjfan527/nf-core-metascopeprolifer -r <SHA>" # pinned to commit SHA (preferred for reproducibility)
+#   "/projects/<lab>/code/nf-core-metascopeprolifer"  # local clone (offline / restricted-network setups)
+pipeline_ref:      "<pipeline-ref>"
+
+# Optional extra `nextflow run` flags, space-separated. Leave empty if none.
+extra_pipeline_args: ""
+
+# -- Paths -------------------------------------------------------------------
+# Absolute paths. Use scratch for fastq + work; persistent storage for outdir.
+scratch_dir:       "<absolute-path-to-your-scratch>"   # e.g. /scratch/<netid>
+work_dir:          "<absolute-path-for-nextflow-work>" # often <scratch_dir>/work
+outdir:            "<absolute-path-for-results>"       # persistent storage
+log_dir:           "<absolute-path-for-slurm-logs>"    # often <scratch_dir>/logs

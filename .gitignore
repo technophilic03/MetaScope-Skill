@@ -1,0 +1,20 @@
+# Track only the skill folder; ignore everything else at the repo root.
+/*
+!/.gitignore
+!/metascope-microbiome/
+
+# OS / editor cruft inside the skill folder
+.DS_Store
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Local config / caches the skill creates at runtime
+metascope-microbiome/.cache/
+metascope-microbiome/venv/

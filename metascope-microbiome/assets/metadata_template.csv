@@ -1,0 +1,5 @@
+sample_id,accession,library_layout,sample_type
+patient001_baseline,SRR12345678,paired,gut
+patient002_followup,SRX9876543,paired,gut
+patient003_baseline,GSM4567890,single,oral
+study_pool,PRJNA1234567,paired,environmental

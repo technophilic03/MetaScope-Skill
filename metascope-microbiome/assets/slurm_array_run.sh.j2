@@ -1,0 +1,66 @@
+#!/bin/bash
+{% if ACCOUNT %}#SBATCH --account={{ ACCOUNT }}
+{% endif %}#SBATCH --partition={{ PARTITION }}
+{% if PARTITION == "main" %}#SBATCH --requeue
+{% endif %}#SBATCH --time={{ TIME }}
+#SBATCH --mem={{ MEM }}
+#SBATCH --cpus-per-task={{ CPUS }}
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --job-name={{ JOB_NAME }}-run
+#SBATCH --output={{ LOG_DIR }}/slurm.%x.%j.out
+#SBATCH --error={{ LOG_DIR }}/slurm.%x.%j.err
+
+# nf-core/metascopeprolifer Nextflow run (array mode — depends on fetch array)
+# Submitted by chain.sh with --dependency=afterok:<fetch_job_id>
+# Pipeline: {{ PIPELINE_REF }}
+# Database: {{ DATABASE_KEY }}
+# Generated: {{ GENERATED_AT }}
+
+set -euo pipefail
+
+module purge
+{{ MODULE_LOADS }}
+
+SAMPLESHEET="{{ SAMPLESHEET }}"
+WORK_DIR="{{ WORK_DIR }}"
+OUTDIR="{{ OUTDIR }}"
+
+mkdir -p "$WORK_DIR" "$OUTDIR"
+cd "$WORK_DIR"
+
+# Verify the fetch array actually produced every FASTQ the samplesheet references.
+python3 - <<'PY'
+import csv, os, sys
+samplesheet = os.environ.get("SAMPLESHEET", "{{ SAMPLESHEET }}")
+missing = []
+with open(samplesheet) as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        for col in ("fastq_1", "fastq_2"):
+            p = row.get(col, "").strip()
+            if p and not os.path.exists(p):
+                missing.append((row["sample"], col, p))
+if missing:
+    print("ERROR: samplesheet references files not on disk:", file=sys.stderr)
+    for sample, col, path in missing:
+        print(f"  sample={sample} {col}={path}", file=sys.stderr)
+    sys.exit(1)
+print("samplesheet → disk: OK")
+PY
+
+echo "[$(date)] Starting nextflow run"
+nextflow run {{ PIPELINE_REF }} \
+    -profile {{ NEXTFLOW_PROFILE }} \
+    -work-dir "$WORK_DIR" \
+    --input "$SAMPLESHEET" \
+    --outdir "$OUTDIR" \
+    --metascope_index_dir "{{ DB_INDEX_DIR }}" \
+    --metascope_target "{{ DB_TARGET }}" \
+{% if DB_FILTER %}    --metascope_filter "{{ DB_FILTER }}" \
+{% endif %}    --metascope_accession_path "{{ DB_ACCESSION_PATH }}" \
+    --metascope_db_path "{{ DB_DB_PATH }}" \
+    {{ EXTRA_PIPELINE_ARGS }}
+
+echo "[$(date)] Nextflow exit code: $?"
+echo "[$(date)] Pipeline complete. Results in: $OUTDIR"
