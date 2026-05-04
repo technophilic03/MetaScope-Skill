@@ -1,10 +1,20 @@
-# Howard's Nextflow pipeline reference
+# MetaScope Nextflow pipeline reference
 
-Howard Fan's MetaScope pipeline lives at https://github.com/hjfan527/nf-core-metascopeprolifer (branch `main`). It is an nf-core-templated Nextflow pipeline for "16S/metagenomic taxonomic prolifer" classification.
+The MetaScope pipeline lives at https://github.com/hjfan527/nf-core-metascopeprolifer (branch `main`), authored by Howard Fan. It is an nf-core-templated Nextflow pipeline for "16S/metagenomic taxonomic prolifer" classification.
 
 ## Status (verified at construction time)
 
-The pipeline is **under active development**. The README, default config, and test config all contain `TODO nf-core:` markers, and `conf/test.config` has `'TODO'` literal strings for every MetaScope-specific parameter. Treat the pipeline as a moving target — pin to a specific commit SHA in the user's `rutgers_config.yaml` (`pipeline_ref` field) for reproducibility.
+The pipeline is **under active development**. The README, default config, and test config all contain `TODO nf-core:` markers, and `conf/test.config` has `'TODO'` literal strings for every MetaScope-specific parameter. Treat the pipeline as a moving target — pin to a specific commit SHA in the user's `SLURM_directives.yaml` (`pipeline_ref` field) for reproducibility.
+
+## Heads-up: `nf-core/metascopeprolifer` is not on the registry yet
+
+The canonical `nextflow run nf-core/metascopeprolifer ...` command **will fail today** — the pipeline is not in the nf-core GitHub org or on the nf-co.re registry. SKILL.md's templates default to `nf-core/metascopeprolifer` because that's the form Howard's README aspires to; if your `nextflow run -preview` errors with "pipeline not found", switch `pipeline_ref` in `SLURM_directives.yaml` to `hjfan527/nf-core-metascopeprolifer` (form #2 below) and re-render. When the pipeline is accepted into nf-co.re, no change to the skill is needed — the canonical name will start resolving.
+
+When compute nodes block outbound traffic, pre-pull on the login node:
+
+```bash
+nextflow pull hjfan527/nf-core-metascopeprolifer  # caches into ~/.nextflow/assets/
+```
 
 ## Required Nextflow version
 
@@ -31,7 +41,7 @@ nextflow run <pipeline_ref> \
 3. **`hjfan527/nf-core-metascopeprolifer -r <commit-sha>`** — pinned to a specific revision. Recommended for reproducibility.
 4. **`/projects/<lab>/code/nf-core-metascopeprolifer`** — local clone. Use when login nodes lack outbound git access or for offline runs.
 
-The user's `rutgers_config.yaml` `pipeline_ref` field decides which form gets baked into the submission script.
+The user's `SLURM_directives.yaml` `pipeline_ref` field decides which form gets baked into the submission script.
 
 ## Parameters (verbatim from `nextflow_schema.json`)
 
@@ -52,7 +62,7 @@ The user's `rutgers_config.yaml` `pipeline_ref` field decides which form gets ba
 | `--metascope_accession_path` | yes      | Path to `accessionTaxa.sql` for taxonomic ID.                          |
 | `--metascope_db_path`        | yes      | Path to BLAST database for `metascope_blast` secondary classification. |
 
-**Implication for "database flexibility":** a single user-facing database choice (e.g. `silva_138`, `rat_explorer`) maps to a *set* of these 5 paths, not a single value. See `references/databases.yaml`.
+**Implication for "database flexibility":** a single user-facing database choice (e.g. `silva_138`, `rat_explorer`) maps to a *set* of these 5 paths, not a single value. See `./metascope-microbiome/databases.yaml` (the cache the skill writes per SKILL.md Step 4) and `assets/databases_template.yaml` for the schema.
 
 ### Reference genome
 
@@ -86,10 +96,10 @@ SAMPLE_SINGLE_END,/path/to/fastq/files/AEG588A4_S4_L003_R1_001.fastq.gz,
 
 ## Resources (default from `conf/test.config`)
 
-`cpus: 4, memory: '15.GB', time: '1.h'` — sufficient for the test profile only. Real runs need significantly more; the user supplies these values via `rutgers_config.yaml`.
+`cpus: 4, memory: '15.GB', time: '1.h'` — sufficient for the test profile only. Real runs need significantly more; the user supplies these values via `SLURM_directives.yaml`.
 
 ## Re-run this research when…
 
-- Howard adds `nf-core/fetchngs` to the workflow → drop the explicit `fastq-dump` step in `assets/slurm_template.sh.j2`.
-- The `TODO` markers in `conf/test.config` are filled in → adopt the resulting paths as a working `silva_138`-like default in `databases.yaml`.
+- Howard adds `nf-core/fetchngs` to the workflow → drop the per-task `fastq-dump` step in `assets/slurm_array.sh.j2`.
+- The `TODO` markers in `conf/test.config` are filled in → adopt the resulting paths as a working `silva_138`-like default in `assets/databases_template.yaml`.
 - The samplesheet schema gains columns (e.g. `strandedness`, `library_layout`) → update `scripts/build_samplesheet.py` and `assets/samplesheet_template.csv`.

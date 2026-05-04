@@ -74,7 +74,7 @@ What's still rejected:
 
 ## Mapping to Howard's samplesheet
 
-Howard's pipeline samplesheet has 3 columns: `sample,fastq_1,fastq_2` (see `references/howard-nextflow.md`). The flow is:
+Howard's pipeline samplesheet has 3 columns: `sample,fastq_1,fastq_2` (see `references/metascope-nextflow.md`). The flow is:
 
 ```
 metadata.csv                    expanded_metadata.csv             samplesheet.csv

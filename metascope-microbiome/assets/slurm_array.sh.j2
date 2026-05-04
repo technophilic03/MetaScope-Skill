@@ -1,0 +1,117 @@
+#!/bin/bash
+{% if ACCOUNT %}#SBATCH --account={{ ACCOUNT }}
+{% endif %}#SBATCH --partition={{ PARTITION }}
+{% if PARTITION == "main" %}#SBATCH --requeue
+{% endif %}#SBATCH --time={{ TIME }}
+#SBATCH --mem={{ MEM }}
+#SBATCH --cpus-per-task={{ CPUS }}
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --job-name={{ JOB_NAME }}
+#SBATCH --output={{ LOG_DIR }}/slurm.%x.%A_%a.out
+#SBATCH --error={{ LOG_DIR }}/slurm.%x.%A_%a.err
+#SBATCH --array=0-{{ N_RUNS_MINUS_ONE }}{% if ARRAY_CONCURRENCY %}%{{ ARRAY_CONCURRENCY }}{% endif %}
+
+# nf-core/metascopeprolifer SLURM array submission
+# Each array task fetches one run's FASTQ via fastq-dump. The last task to
+# complete its fetch (detected via per-task marker files) runs the Nextflow
+# pipeline once over the full samplesheet. flock guards against the rare
+# race where two tasks see "all done" simultaneously.
+# Pipeline: {{ PIPELINE_REF }}
+# Database: {{ DATABASE_KEY }}
+# Generated: {{ GENERATED_AT }}
+
+set -euo pipefail
+
+module purge
+{{ MODULE_LOADS }}
+
+RUNS_LIST="{{ RUNS_LIST }}"
+FASTQ_DIR="{{ FASTQ_DIR }}"
+SAMPLESHEET="{{ SAMPLESHEET }}"
+WORK_DIR="{{ WORK_DIR }}"
+OUTDIR="{{ OUTDIR }}"
+LOG_DIR="{{ LOG_DIR }}"
+MARKER_DIR="$WORK_DIR/.metascope_markers"
+N_RUNS={{ N_RUNS }}
+
+mkdir -p "$FASTQ_DIR" "$WORK_DIR" "$OUTDIR" "$LOG_DIR" "$MARKER_DIR"
+
+# --- Step 1: this task fetches its assigned run -----------------------------
+RUN=$(sed -n "$((SLURM_ARRAY_TASK_ID + 1))p" "$RUNS_LIST" | tr -d '[:space:]')
+if [[ -z "$RUN" ]]; then
+    echo "ERROR: empty run at array index $SLURM_ARRAY_TASK_ID in $RUNS_LIST" >&2
+    exit 1
+fi
+
+# Idempotent: skip if already downloaded (re-submissions or partial recovery).
+if [[ -f "$FASTQ_DIR/${RUN}_1.fastq.gz" || -f "$FASTQ_DIR/${RUN}.fastq.gz" ]]; then
+    echo "[$(date)] $RUN already downloaded, skipping fetch"
+else
+    echo "[$(date)] fastq-dump $RUN  (task $SLURM_ARRAY_TASK_ID/$((N_RUNS - 1)))"
+    fastq-dump --split-files --gzip --outdir "$FASTQ_DIR" "$RUN"
+    echo "[$(date)] $RUN fetch complete"
+fi
+
+# Mark this task done (atomic).
+touch "$MARKER_DIR/${SLURM_ARRAY_TASK_ID}.done"
+
+# --- Step 2: if all fetches are complete, this task runs Nextflow -----------
+# Count completed markers. If we're the last to finish, we run the pipeline.
+# flock ensures exactly one task wins if two finish at the same moment.
+n_done=$(find "$MARKER_DIR" -maxdepth 1 -name "*.done" | wc -l)
+if [[ "$n_done" -lt "$N_RUNS" ]]; then
+    echo "[$(date)] $n_done/$N_RUNS fetches done; another task will run Nextflow."
+    exit 0
+fi
+
+(
+    flock -n 9 || {
+        echo "[$(date)] another task already holds the Nextflow lock; exiting cleanly."
+        exit 0
+    }
+
+    # Re-check after acquiring the lock (defence against marker race).
+    if [[ -f "$WORK_DIR/.nextflow_complete" ]]; then
+        echo "[$(date)] Nextflow already completed in a prior run; nothing to do."
+        exit 0
+    fi
+
+    cd "$WORK_DIR"
+
+    # Verify every FASTQ the samplesheet references is on disk before launching.
+    python3 - <<PY
+import csv, os, sys
+samplesheet = "$SAMPLESHEET"
+missing = []
+with open(samplesheet) as f:
+    for row in csv.DictReader(f):
+        for col in ("fastq_1", "fastq_2"):
+            p = (row.get(col) or "").strip()
+            if p and not os.path.exists(p):
+                missing.append((row["sample"], col, p))
+if missing:
+    print("ERROR: samplesheet references files not on disk:", file=sys.stderr)
+    for sample, col, path in missing:
+        print(f"  sample={sample} {col}={path}", file=sys.stderr)
+    sys.exit(1)
+print("samplesheet -> disk: OK")
+PY
+
+    echo "[$(date)] Starting nextflow run (pipeline: {{ PIPELINE_REF }})"
+    nextflow run {{ PIPELINE_REF }} \
+        -profile {{ NEXTFLOW_PROFILE }} \
+        -work-dir "$WORK_DIR" \
+        -resume \
+        --input "$SAMPLESHEET" \
+        --outdir "$OUTDIR" \
+        --metascope_index_dir "{{ DB_INDEX_DIR }}" \
+        --metascope_target "{{ DB_TARGET }}" \
+{% if DB_FILTER %}        --metascope_filter "{{ DB_FILTER }}" \
+{% endif %}        --metascope_accession_path "{{ DB_ACCESSION_PATH }}" \
+        --metascope_db_path "{{ DB_BLAST_PATH }}" \
+        {{ EXTRA_PIPELINE_ARGS }}
+
+    touch "$WORK_DIR/.nextflow_complete"
+    echo "[$(date)] Pipeline complete. Results in: $OUTDIR"
+) 9>"$WORK_DIR/.nextflow.lock"

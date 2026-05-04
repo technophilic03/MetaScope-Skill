@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+venv/
+SLURM_directives.yaml
+databases.yaml
+SraRunTable.csv
+expanded_metadata.csv
+samplesheet.csv
+runs.txt
+submit_metascope.sh

@@ -1,0 +1,41 @@
+# databases.yaml -- registry of MetaScope reference databases.
+#
+# The skill writes (and re-reads) this file at ./metascope-microbiome/databases.yaml
+# per SKILL.md Step 4. Each entry maps a user-facing name (the cache key) to
+# the 5 paths Howard's pipeline needs:
+#
+#   metascope_index_dir       - Bowtie2 index directory                    (required)
+#   metascope_target          - target reference index name                (required)
+#   metascope_filter          - optional host filter index name            (optional)
+#   metascope_accession_path  - path to accessionTaxa.sql                  (required)
+#   metascope_db_path         - path to BLAST database                     (required)
+#
+# Use `~` (YAML null) to omit `metascope_filter` for a database with no host
+# filter. Any other path may NOT be empty for a working entry - the renderer
+# refuses to produce a script with missing required paths.
+#
+# See SKILL.md Step 4 ("Resolve database") for the interactive flow that
+# populates this file. See references/metascope-nextflow.md for what each
+# parameter means in the pipeline.
+
+databases:
+  # Example entry - replace with real paths once you have them mounted on
+  # Amarel. Comment out or delete entries you don't have access to.
+  silva_138:
+    type: 16S
+    metascope_index_dir:      "<absolute-path-to-bowtie2-index-dir>"
+    metascope_target:         "silva_138"
+    metascope_filter:         ~                                        # no host filter for SILVA
+    metascope_accession_path: "<absolute-path-to-accessionTaxa.sql>"
+    metascope_db_path:        "<absolute-path-to-blast-db>"
+
+  # Add more entries here. The cache key (e.g. "my_shotgun_db") is what the
+  # user supplies as --database <key>. Choose any name you like.
+  #
+  # my_shotgun_db:
+  #   type: shotgun
+  #   metascope_index_dir:      /projects/<lab>/dbs/<name>/index
+  #   metascope_target:         <target-name>
+  #   metascope_filter:         human_grch38
+  #   metascope_accession_path: /projects/<lab>/dbs/accessionTaxa.sql
+  #   metascope_db_path:        /projects/<lab>/dbs/blast/<name>

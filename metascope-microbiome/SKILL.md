@@ -65,11 +65,11 @@ Ask the user if any input had not been provided:
 1. **Accessions** — file path, or paste them inline.
 2. **Metadata source** — auto-fetch or file path.
 
-Wait for both answers before continuing. The sample count and library layout collected here informs the resource defaults in Step 2.
+Wait for both answers before continuing.
 
 ### Step 2: Configure SLURM directives (ask the user)
 
-Walk through these values one at a time. Use the data from Step 1 to suggest informed defaults — sample count drives `--time`, library type (16S vs shotgun) drives `--mem` and `--cpus`. Accept whatever the user provides.
+Walk through these values one at a time. Use the data from Step 1 to suggest informed hints. Accept whatever the user provides.
 
 If a saved cache exists at `./metascope-microbiome/SLURM_directives.yaml`, offer it as defaults. If the user accepts, only ask about values they want to change.
 
@@ -103,7 +103,7 @@ Outputs:
 
 ### Step 4: Resolve database (interactive)
 
-MetaScope needs five reference paths: 
+MetaScope needs up to five reference paths (filter is optional): 
 - `metascope_index_dir` - bowtie index directory
 - `metascope_target` - target name
 - `metascope_filter` - optional host filter
@@ -237,10 +237,10 @@ After the user runs `sbatch`:
 ## Error handling
 
 Common failures and what to do:
-- **Validator fails:** show every error at once (the script does this); ask the user to fix the metadata or SRR list and re-run step 3.
-- **`<...>` placeholder remains in rendered output:** a cached YAML is incomplete. Tell the user which field; they edit and re-render.
-- **fastq-dump fails inside the SLURM job:** see `references/sra-toolkit.md` "Known failure modes". Most often: no internet on compute nodes (run on login node first), or filesystem quota.
-- **Nextflow can't find a database file:** a path collected in Step 4 is wrong or unreachable from compute nodes. Verify `metascope_index_dir`, `metascope_target`, etc. against the actual filesystem.
+- Validator fails: show every error at once (the script does this); fix the metadata or SRR list and re-run step 3.
+- `<...>` placeholder remains in rendered output: a cached YAML is incomplete. Tell the user which field; they edit and re-render.
+- fastq-dump fails inside the SLURM job: see `references/sra-toolkit.md` "Known failure modes".
+- Nextflow can't find a database file: a path collected in Step 4 is wrong or unreachable from compute nodes. Ask users to verify the path and assist them with helpful terminal command.
 
 ## References
 

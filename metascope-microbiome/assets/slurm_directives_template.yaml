@@ -1,0 +1,51 @@
+# SLURM_directives.yaml -- OPTIONAL CACHE for the metascope-microbiome skill.
+#
+# This file is NOT required. The skill collects these values interactively at
+# run time (see SKILL.md "Step 2: Configure SLURM directives"). After the
+# first session, the skill offers to write the user's answers to
+# ./metascope-microbiome/SLURM_directives.yaml so future runs can re-use them
+# (passed as `--slurm-config` to render_submission.py). Individual values can
+# still be overridden with `--account`, `--partition`, etc. for ad-hoc runs.
+#
+# If you DO populate this template by hand: replace every <PLACEHOLDER>.
+# Any `<...>` marker still present at render time is reported as an error.
+#
+# See references/rutgers-hpc.md for what each field means.
+
+# -- SLURM scheduler (SKILL.md Step 2 fields) --------------------------------
+account:           ~                             # Optional on Amarel; many groups don't use one. Set to your account if needed (check with `sshare -U`).
+partition:         "<partition-name>"            # Amarel options: main, gpu, mem, nonpre, graphical (confirm via `sinfo`)
+default_time:      "<HH:MM:SS>"                  # e.g. 12:00:00 (or D-HH:MM:SS for multi-day; Amarel default 3-00:00:00)
+default_mem:       "<e.g. 200G>"
+default_cpus:      "<e.g. 16>"
+
+# -- Paths (SKILL.md Step 2 fields) ------------------------------------------
+# Absolute paths. Use scratch for fastq + work; persistent storage for outdir.
+scratch_dir:       "<absolute-path-to-your-scratch>"   # e.g. /scratch/<netid>
+work_dir:          "<absolute-path-for-nextflow-work>" # often <scratch_dir>/work
+outdir:            "<absolute-path-for-results>"       # persistent storage
+log_dir:           "<absolute-path-for-slurm-logs>"    # often <scratch_dir>/logs
+
+# -- Pipeline plumbing -------------------------------------------------------
+# Not in SKILL.md Step 2's interactive table but the rendered script needs
+# them. Defaults work for most users; override only if your Rutgers cluster
+# uses different module names or you've cloned the pipeline locally.
+
+# Multi-line module-load script. Confirm names with `module avail <prefix>`.
+# Common needs: nextflow, java, singularity OR apptainer, sratoolkit.
+module_loads: |
+  module load <nextflow-module>
+  module load <java-module>
+  module load <singularity-or-apptainer-module>
+  module load <sratoolkit-module>
+
+# nf-core profile string. Common Rutgers values: "singularity", "singularity,slurm".
+nextflow_profile:  "singularity"
+
+# What goes into `nextflow run <pipeline_ref> ...` inside the submission script.
+# Defaults to the canonical nf-core shorthand. See references/metascope-nextflow.md
+# if that name fails to resolve - you may need the direct GitHub form.
+pipeline_ref:      "nf-core/metascopeprolifer"
+
+# Optional extra `nextflow run` flags, space-separated. Leave empty if none.
+extra_pipeline_args: ""

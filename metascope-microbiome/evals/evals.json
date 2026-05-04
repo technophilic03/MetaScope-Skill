@@ -1,32 +1,32 @@
 {
-  "skill_name": "metascope-profiling",
+  "skill_name": "metascope-slurm",
   "evals": [
     {
       "id": 0,
       "name": "happy-path-runs-silva138",
-      "prompt": "I have 3 SRRs (SRR12345678, SRR12345679, SRR12345680) and a metadata.csv from our gut microbiome study at ~/work/gut_study/metadata.csv. Accession list is at ~/work/gut_study/accessions.txt. Generate the Amarel submission script for the MetaScope run using SILVA 138. My rutgers.yaml is already filled.",
-      "expected_output": "Skill validates inputs, expansion is a no-op (all runs), writes expanded_metadata.csv + samplesheet.csv + runs.txt, renders submit.sh containing both the fastq-dump loop (over runs.txt) and a `nextflow run nf-core/metascopeprolifer` (or hjfan527/...) line, runs preflight, and shows the literal `sbatch <run_dir>/submit.sh` command. Skill does NOT execute sbatch. Skill cites Howard's pipeline and the SLURM template under assets/.",
+      "prompt": "I have 3 SRRs (SRR12345678, SRR12345679, SRR12345680) and a metadata.csv from our gut microbiome study at /scratch/jdoe/gut_study/metadata.csv. Accession list is at /scratch/jdoe/gut_study/accessions.txt. Generate the Amarel submission script for the MetaScope run using SILVA 138. My ./metascope-microbiome/SLURM_directives.yaml is already filled in.",
+      "expected_output": "Skill validates inputs, expansion is a no-op (all runs), writes expanded_metadata.csv + samplesheet.csv + runs.txt, renders ONE submit_metascope.sh containing both the per-array-task fastq-dump and a `nextflow run nf-core/metascopeprolifer` (or hjfan527/...) line gated by a marker-barrier so it runs once after all fetches complete, runs preflight, and shows the literal `sbatch <run_dir>/submit_metascope.sh` command. Skill does NOT execute sbatch. Skill does NOT produce a separate submit_fetch.sh + submit_run.sh - the SKILL.md contract is one script. Skill cites references/metascope-nextflow.md and assets/slurm_array.sh.j2.",
       "files": []
     },
     {
       "id": 1,
-      "name": "rat-explorer-wip-guard",
-      "prompt": "Generate the Amarel submission script using the rat_explorer database — Sarah's BYU group says it's ready. Accessions are at ~/data/accessions.txt and metadata.csv is in the same dir.",
-      "expected_output": "Skill refuses to render submit.sh because rat_explorer has status: wip in references/databases.yaml. Skill explains the registry model, points at references/databases.yaml, and offers silva_138 or custom as alternatives. Skill does NOT fabricate paths to make the run go through. Skill does NOT invoke sbatch.",
+      "name": "missing-database-graceful-prompt",
+      "prompt": "Generate the Amarel submission script using the rat_explorer database - Sarah's BYU group says it's ready. Accessions are at /scratch/jdoe/data/accessions.txt and metadata.csv is in the same dir.",
+      "expected_output": "Skill checks ./metascope-microbiome/databases.yaml, sees rat_explorer is not present (or has placeholder paths), refuses to render submit_metascope.sh, explains the cache model from SKILL.md Step 4, and offers to (a) add a new entry by collecting the 5 paths interactively, or (b) pick another cached entry. Skill does NOT fabricate paths. Skill does NOT invoke sbatch. Skill points the user at references/metascope-nextflow.md for what each MetaScope param means.",
       "files": []
     },
     {
       "id": 2,
-      "name": "missing-rutgers-config-halt",
-      "prompt": "Generate the Amarel slurm submission script for metascope on these paired-end accessions with the default 16S DB. Accessions: SRR1...SRR8 (placeholder). Metadata is at ~/scratch/run01/meta.csv.",
-      "expected_output": "Skill detects that ~/.config/metascope-microbiome/rutgers.yaml is missing or has unfilled <PLACEHOLDER> values, copies assets/rutgers_config_template.yaml to that path (creating ~/.config/metascope-microbiome/ if needed), explains what the user must fill, points them at references/rutgers-hpc.md, and HALTS gracefully. Does NOT render a submit.sh with placeholders still present. Does NOT invent any Amarel-specific values. Does NOT run sbatch.",
+      "name": "missing-slurm-config-halt",
+      "prompt": "Generate the Amarel slurm submission script for metascope on these paired-end accessions with the default 16S DB. Accessions: SRR1...SRR8 (placeholder). Metadata is at /scratch/jdoe/run01/meta.csv.",
+      "expected_output": "Skill detects that ./metascope-microbiome/SLURM_directives.yaml is missing or has unfilled <PLACEHOLDER> values, copies assets/slurm_directives_template.yaml to ./metascope-microbiome/SLURM_directives.yaml (creating the directory if needed), explains what the user must fill, points them at references/rutgers-hpc.md, and HALTS gracefully. Does NOT render a submit_metascope.sh with placeholders still present. Does NOT invent any Amarel-specific values. Does NOT run sbatch.",
       "files": []
     },
     {
       "id": 3,
       "name": "mixed-accessions-srx-gse-expansion",
-      "prompt": "I want to run MetaScope on a published GEO study and one extra SRX experiment. Accession list at ~/work/study42/accessions.txt has GSE198765 and SRX9876543. metadata.csv at ~/work/study42/metadata.csv has those two rows mapped to sample IDs `study_pool` and `extra_lib`. Both paired-end. Use SILVA 138. Generate the Amarel submission script.",
-      "expected_output": "Skill validates the accession patterns (GSE and SRX are recognized), uses pysradb to expand both to their constituent SRR runs, writes expanded_metadata.csv with multiple rows per sample where appropriate (one sample_id appears multiple times if its accession had multiple runs), builds samplesheet with same `sample` value spanning multiple rows, runs.txt has all unique runs, submit.sh fastq-dump loop iterates the unique runs. Skill cites references/metadata-schema.md when explaining the multi-run-per-sample pattern. Skill does NOT submit.",
+      "prompt": "I want to run MetaScope on a published GEO study and one extra SRX experiment. Accession list at /scratch/jdoe/study42/accessions.txt has GSE198765 and SRX9876543. metadata.csv at /scratch/jdoe/study42/metadata.csv has those two rows mapped to sample IDs `study_pool` and `extra_lib`. Both paired-end. Use SILVA 138. Generate the Amarel submission script.",
+      "expected_output": "Skill validates the accession patterns (GSE and SRX are recognized), uses pysradb to expand both to their constituent SRR runs, writes expanded_metadata.csv with multiple rows per sample where appropriate (one sample_id appears multiple times if its accession had multiple runs), builds samplesheet with same `sample` value spanning multiple rows, runs.txt has all unique runs, the rendered submit_metascope.sh uses `#SBATCH --array=0-(N-1)` where N is the unique-run count and per-task fastq-dump iterates by SLURM_ARRAY_TASK_ID. Skill cites references/metadata-schema.md when explaining the multi-run-per-sample pattern. Skill does NOT submit.",
       "files": []
     }
   ]

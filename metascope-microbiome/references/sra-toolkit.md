@@ -1,21 +1,21 @@
 # SRA Toolkit reference
 
-Howard's pipeline does not fetch FASTQ files from SRA — see `references/howard-nextflow.md`. The skill therefore runs `fastq-dump` from the SRA Toolkit *before* invoking Nextflow, as a step inside the SLURM submission script.
+Howard's pipeline does not fetch FASTQ files from SRA — see `references/metascope-nextflow.md`. The skill therefore runs `fastq-dump` from the SRA Toolkit *before* invoking Nextflow, inside each array task of the SLURM submission script.
 
 ## What `fastq-dump` accepts
 
-`fastq-dump` only takes **run** accessions (`SRR…`, `ERR…`, `DRR…`) directly. For experiments (`SRX…`), samples (`SRS…`), studies (`SRP…`), BioProjects (`PRJNA…`), or GEO entries (`GSE…`/`GSM…`), the validator (`scripts/validate_inputs.py`) expands the user's accession to its constituent runs *first*, using `pysradb` (see `references/metadata-schema.md`). The SLURM job's `fastq-dump` loop only ever sees run accessions, fed via `runs.txt` produced by `scripts/build_samplesheet.py`.
+`fastq-dump` only takes **run** accessions (`SRR…`, `ERR…`, `DRR…`) directly. For experiments (`SRX…`), samples (`SRS…`), studies (`SRP…`), BioProjects (`PRJNA…`), or GEO entries (`GSE…`/`GSM…`), the validator (`scripts/validate_inputs.py`) expands the user's accession to its constituent runs *first*, using `pysradb` (see `references/metadata-schema.md`). Each SLURM array task in `submit_metascope.sh` only ever sees a single run accession, picked from `runs.txt` (produced by `scripts/build_samplesheet.py`) using `$SLURM_ARRAY_TASK_ID` as the line index.
 
 So:
 - User puts any accession type in `metadata.csv`.
 - Validator expands to runs.
-- SLURM `fastq-dump` loop iterates over the expanded run list.
+- SLURM array task `i` fetches run `i` from `runs.txt`. Tasks run in parallel.
 
-This separation keeps the SLURM script simple (it doesn't need to know about pysradb or expansion logic).
+This separation keeps the SLURM template simple (it doesn't need to know about pysradb or expansion logic) and parallelizes the fetch step across the cluster.
 
 ## Why fastq-dump (and not fasterq-dump)
 
-Both work. `fastq-dump` is older, more widely available, and supported by every SRA Toolkit version; `fasterq-dump` is faster but has different flags and requires more scratch space. The skill uses `fastq-dump` for portability. If your Rutgers module provides only `fasterq-dump`, swap the invocation in `assets/slurm_template.sh.j2`.
+Both work. `fastq-dump` is older, more widely available, and supported by every SRA Toolkit version; `fasterq-dump` is faster but has different flags and requires more scratch space. The skill uses `fastq-dump` for portability. If your Rutgers module provides only `fasterq-dump`, swap the invocation in `assets/slurm_array.sh.j2`.
 
 ## Invocation used by the skill
 
@@ -33,7 +33,7 @@ The naming convention (`<SRR>_1.fastq.gz`, `<SRR>_2.fastq.gz`, `<SRR>.fastq.gz`)
 
 ## Module loading on Rutgers
 
-The user's `rutgers_config.yaml` `module_loads` field must include the SRA Toolkit module. The exact name varies per cluster; common values:
+The user's `SLURM_directives.yaml` `module_loads` field must include the SRA Toolkit module. The exact name varies per cluster; common values:
 - `sratoolkit`
 - `sra-tools`
 - `SRA-Toolkit`
@@ -67,4 +67,4 @@ The skill does not perform this setup. Users who haven't run it will see SRA Too
 
 ## Why this file exists separately
 
-Keeping SRA-Toolkit notes out of `references/howard-nextflow.md` lets future maintainers cleanly remove this file if Howard's pipeline gains an `nf-core/fetchngs` subworkflow — at that point the skill should drop the explicit fastq-dump step entirely.
+Keeping SRA-Toolkit notes out of `references/metascope-nextflow.md` lets future maintainers cleanly remove this file if Howard's pipeline gains an `nf-core/fetchngs` subworkflow — at that point the skill should drop the explicit fastq-dump step entirely.
