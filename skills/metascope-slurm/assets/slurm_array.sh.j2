@@ -24,6 +24,9 @@
 set -euo pipefail
 
 module purge
+# Amarel: nextflow + sratoolkit live in /projects/community/modulefiles, which
+# isn't on the default MODULEPATH. Extend it before `module load` runs.
+export MODULEPATH=$MODULEPATH:/projects/community/modulefiles
 {{ MODULE_LOADS }}
 
 RUNS_LIST="{{ RUNS_LIST }}"
@@ -114,4 +117,11 @@ PY
 
     touch "$WORK_DIR/.nextflow_complete"
     echo "[$(date)] Pipeline complete. Results in: $OUTDIR"
+{% if REMOVE_FASTQ_AFTER_RUN %}
+    # User opted into post-run FASTQ cleanup. Only this task (the one that
+    # ran Nextflow successfully) reaches this point; concurrent fetch tasks
+    # exited earlier without touching FASTQ_DIR.
+    echo "[$(date)] Removing FASTQ_DIR (--remove-fastq-after-run): $FASTQ_DIR"
+    rm -rf "$FASTQ_DIR"
+{% endif %}
 ) 9>"$WORK_DIR/.nextflow.lock"

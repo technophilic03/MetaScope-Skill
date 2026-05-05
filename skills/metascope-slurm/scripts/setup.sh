@@ -8,32 +8,41 @@
 #   2. Else                    -> create/reuse a dedicated venv at
 #                                 <skill-dir>/venv  (i.e. ./metascope-microbiome/venv)
 #
-# Paths are anchored to this script's location, NOT $HOME or any dot folder -
-# HPC users (Amarel) typically have a tiny home quota and real work lives
-# under /scratch or /projects. Keeping everything under the skill directory
-# means the user's working tree owns its own venv.
 #
 # Usage:    bash scripts/setup.sh
 # Override: PYTHON=/path/to/python3 bash scripts/setup.sh
 
 set -euo pipefail
 
-# Anchor paths to the skill directory regardless of cwd.
+# Anchor paths to the skill directory.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 SKILL_VENV="$SKILL_DIR/venv"
 
-# pip-name : python-import-name pairs (some packages differ in the two)
+
 DEPS=(
     "pyyaml:yaml"
     "jinja2:jinja2"
-    "pysradb:pysradb"
 )
 
 PYTHON="${PYTHON:-python3}"
+
+# If python3 isn't on PATH, try `module load python` once (Rutgers Amarel
+# convention) before giving up. If `module` isn't a shell function, the
+# user isn't on HPC and just doesn't have Python — go straight to error.
 if ! command -v "$PYTHON" >/dev/null 2>&1; then
-    echo "ERROR: '$PYTHON' not on PATH. Set PYTHON=<path-to-python3> and retry." >&2
-    exit 1
+    if type module >/dev/null 2>&1; then
+        echo "$PYTHON not on PATH. Trying 'module load python'..."
+        module load python >/dev/null 2>&1 || true
+    fi
+
+    if ! command -v "$PYTHON" >/dev/null 2>&1; then
+        echo "ERROR: '$PYTHON' not on PATH." >&2
+        echo "  - On HPC: run 'module avail python' to find a Python module, then" >&2
+        echo "    'module load <name>' before re-running this script." >&2
+        echo "  - Otherwise: install Python 3.7+, or set PYTHON=<path-to-python3>." >&2
+        exit 1
+    fi
 fi
 
 # -- Pick install target -----------------------------------------------------

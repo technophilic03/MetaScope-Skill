@@ -1,0 +1,16 @@
+{
+  "name": "Metascope_skill",
+  "owner": {
+    "name": "technophilic03"
+  },
+  "plugins": [
+    {
+      "name": "metascope-slurm",
+      "source": {
+        "source": "github",
+        "repo": "technophilic03/MetaScope-Skill"
+      },
+      "description": "Generate Rutgers Amarel SLURM array submission scripts that wrap nf-core/metascopeprolifer for 16S/shotgun metagenomic taxonomic profiling."
+    }
+  ]
+}

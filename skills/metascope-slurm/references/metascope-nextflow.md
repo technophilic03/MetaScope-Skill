@@ -62,7 +62,7 @@ The user's `SLURM_directives.yaml` `pipeline_ref` field decides which form gets 
 | `--metascope_accession_path` | yes      | Path to `accessionTaxa.sql` for taxonomic ID.                          |
 | `--metascope_db_path`        | yes      | Path to BLAST database for `metascope_blast` secondary classification. |
 
-**Implication for "database flexibility":** a single user-facing database choice (e.g. `silva_138`, `rat_explorer`) maps to a *set* of these 5 paths, not a single value. See `./metascope-microbiome/databases.yaml` (the cache the skill writes per SKILL.md Step 4) and `assets/databases_template.yaml` for the schema.
+**Implication for "database flexibility":** a single user-facing database choice maps to a *set* of these 5 paths, not a single value. See `./metascope-microbiome/databases.yaml` (the cache the skill writes per SKILL.md Step 4) and `assets/databases_template.yaml` for the schema.
 
 ### Reference genome
 
@@ -70,7 +70,7 @@ Standard nf-core: `--genome` (iGenomes ID), `--fasta` (custom FASTA), `--igenome
 
 ### Profiles defined in `nextflow.config`
 
-`conda`, `mamba`, `docker`, `singularity`, `apptainer`, `podman`, `shifter`, `charliecloud`, `wave`, `gpu`, `arm64`, `emulate_amd64`, `test`, `test_full`. **No SLURM profile is baked in** — Rutgers requires either an institutional config from `nf-core/configs` or a custom `-c` config supplied by the user (see `references/rutgers-hpc.md`).
+`conda`, `mamba`, `docker`, `singularity`, `apptainer`, `podman`, `shifter`, `charliecloud`, `wave`, `gpu`, `arm64`, `emulate_amd64`, `test`, `test_full`. **No SLURM profile is baked in** — Rutgers requires either an institutional config from `nf-core/configs` or a custom `-c` config supplied by the user (see SKILL.md Step 2 for `nextflow_profile`).
 
 ## Samplesheet schema (verbatim from `assets/schema_input.json`)
 
@@ -92,14 +92,10 @@ SAMPLE_SINGLE_END,/path/to/fastq/files/AEG588A4_S4_L003_R1_001.fastq.gz,
 
 ## Does the pipeline fetch FASTQ from SRA?
 
-**No.** `main.nf` includes only `METASCOPEPROLIFER`, `PIPELINE_INITIALISATION`, `PIPELINE_COMPLETION` — no `nf-core/fetchngs` subworkflow, and the samplesheet schema demands existing local `.f[ast]q.gz` files. **The skill must run `fastq-dump` (SRA Toolkit) before invoking the pipeline.** See `references/sra-toolkit.md`.
+**No.** `main.nf` includes only `METASCOPEPROLIFER`, `PIPELINE_INITIALISATION`, `PIPELINE_COMPLETION` — no `nf-core/fetchngs` subworkflow, and the samplesheet schema demands existing local `.f[ast]q.gz` files. **The skill must run `fastq-dump` (SRA Toolkit) before invoking the pipeline.** The fastq-dump invocation is in `assets/slurm_array.sh.j2`; SRA Toolkit setup notes are in SKILL.md Step 0 and Step 8.
 
 ## Resources (default from `conf/test.config`)
 
 `cpus: 4, memory: '15.GB', time: '1.h'` — sufficient for the test profile only. Real runs need significantly more; the user supplies these values via `SLURM_directives.yaml`.
 
-## Re-run this research when…
 
-- Howard adds `nf-core/fetchngs` to the workflow → drop the per-task `fastq-dump` step in `assets/slurm_array.sh.j2`.
-- The `TODO` markers in `conf/test.config` are filled in → adopt the resulting paths as a working `silva_138`-like default in `assets/databases_template.yaml`.
-- The samplesheet schema gains columns (e.g. `strandedness`, `library_layout`) → update `scripts/build_samplesheet.py` and `assets/samplesheet_template.csv`.

@@ -10,7 +10,7 @@
 # If you DO populate this template by hand: replace every <PLACEHOLDER>.
 # Any `<...>` marker still present at render time is reported as an error.
 #
-# See references/rutgers-hpc.md for what each field means.
+# See SKILL.md Step 2 for what each field means and where to find values.
 
 # -- SLURM scheduler (SKILL.md Step 2 fields) --------------------------------
 account:           ~                             # Optional on Amarel; many groups don't use one. Set to your account if needed (check with `sshare -U`).
@@ -31,13 +31,17 @@ log_dir:           "<absolute-path-for-slurm-logs>"    # often <scratch_dir>/log
 # them. Defaults work for most users; override only if your Rutgers cluster
 # uses different module names or you've cloned the pipeline locally.
 
-# Multi-line module-load script. Confirm names with `module avail <prefix>`.
-# Common needs: nextflow, java, singularity OR apptainer, sratoolkit.
+# Hardcoded for Amarel. The rendered SLURM script does `module purge` then
+# extends MODULEPATH to include /projects/community/modulefiles (where
+# nextflow + sratoolkit live), so these are everything the array task needs:
+# python for the inline check, sratoolkit for fastq-dump, nextflow + java +
+# singularity for the pipeline run.
 module_loads: |
-  module load <nextflow-module>
-  module load <java-module>
-  module load <singularity-or-apptainer-module>
-  module load <sratoolkit-module>
+  module load python
+  module load sratoolkit
+  module load nextflow
+  module load java
+  module load singularity
 
 # nf-core profile string. Common Rutgers values: "singularity", "singularity,slurm".
 nextflow_profile:  "singularity"

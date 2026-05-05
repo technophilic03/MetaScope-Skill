@@ -31,7 +31,7 @@ Refuses to render if:
 
 Output: ready-to-submit script. Does NOT submit - the user runs `sbatch`.
 
-References: references/metascope-nextflow.md, references/rutgers-hpc.md.
+References: references/metascope-nextflow.md, SKILL.md Step 2 (SLURM directives).
 """
 from __future__ import annotations  # makes type hints lazy: 3.7+ compatible
 
@@ -226,6 +226,13 @@ def main() -> int:
     p.add_argument("--array-concurrency", type=int, default=None,
                    help="Optional cap on concurrent array tasks "
                         "(SLURM `%%N` syntax).")
+    p.add_argument("--remove-fastq-after-run", action="store_true",
+                   help="Append `rm -rf \"$FASTQ_DIR\"` to the rendered SLURM "
+                        "script, gated on Nextflow success. Useful when "
+                        "FASTQ_DIR is on scratch — Amarel does NOT auto-purge "
+                        "scratch unless the user is over 1 TB quota AND files "
+                        "are 90+ days idle, so cleanup is the user's "
+                        "responsibility otherwise.")
 
     args = p.parse_args()
 
@@ -312,6 +319,7 @@ def main() -> int:
         "N_RUNS":              n_runs,
         "N_RUNS_MINUS_ONE":    n_runs - 1,
         "ARRAY_CONCURRENCY":   args.array_concurrency or "",
+        "REMOVE_FASTQ_AFTER_RUN": args.remove_fastq_after_run,
     }
 
     env = Environment(

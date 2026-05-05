@@ -1,9 +1,10 @@
-# Track only the skill folder; ignore everything else at the repo root.
+# Track only what the plugin needs to be installable as a marketplace plugin.
 /*
 !/.gitignore
-!/metascope-microbiome/
+!/.claude-plugin/
+!/skills/
 
-# OS / editor cruft inside the skill folder
+# OS / editor cruft
 .DS_Store
 *.swp
 *.swo
@@ -16,5 +17,4 @@ __pycache__/
 venv/
 
 # Local config / caches the skill creates at runtime
-metascope-microbiome/.cache/
-metascope-microbiome/venv/
+skills/metascope-slurm/.cache/

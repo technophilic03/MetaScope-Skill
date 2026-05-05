@@ -1,0 +1,10 @@
+{
+  "name": "metascope-slurm",
+  "description": "Generate Rutgers Amarel SLURM array submission scripts that wrap nf-core/metascopeprolifer for 16S/shotgun metagenomic taxonomic profiling. Validates SRA inputs, builds the samplesheet, fans fastq-dump out across array tasks, and runs the Nextflow pipeline once after all fetches complete.",
+  "version": "0.1.0",
+  "author": {
+    "name": "technophilic03",
+    "email": "leng@bu.edu"
+  },
+  "homepage": "https://github.com/technophilic03/MetaScope-Skill"
+}

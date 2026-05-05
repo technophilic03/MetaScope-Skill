@@ -1,0 +1,4 @@
+sample_id,accession,library_layout,sample_type
+patient001_baseline,SRR12345678,paired,gut
+patient002_followup,SRR23456789,paired,gut
+patient003_baseline,SRR34567890,single,oral

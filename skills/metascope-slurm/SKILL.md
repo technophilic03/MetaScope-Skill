@@ -16,42 +16,63 @@ Use when users:
 
 ## Inputs the user provides
 
-### 1. Accession numbers
+### 1. Accession(s)
 
-Any SRA or GEO accession. The validator script (`scripts/validate_inputs.py`) accepts all standard prefix families and expands non-run
-accessions to runs.
+Any SRA or GEO accession is acceptable as user input. Two levels of input:
 
-Flags:
-Choose a flag to accept accession number input based on the type user provided. 
-- `--accessions-file <path>` — if an accession list file was provided.
-- `--accessions-inline "SRR12345,SRR45678,..."` — If the user pasted accessions in chat.
+- **Run-level**: consumed directly by the rest of the pipeline.
+- **Non-run level**: may need expansion to runs first (e.g. BioProject, experiment, study, sample, GEO).
 
+The Python scripts only consume run-level CSVs. When the user supplies a non-run accession, Claude does the expansion using `WebFetch` against NCBI E-utilities (see "Expansion via E-utilities" below).
 
 ### 2. Metadata CSV
 
-Two options. Ask the user which they want:
+The pipeline needs a CSV that has, at minimum, run accession + library layout per row. Two ways the CSV gets to disk:
 
-- **Option A — auto-fetch (default).** No flag. The validator script fetches the metadata table to
-  `<run_dir>/SraRunTable.csv` for the user to inspect.
-- **Option B — user-provided CSV.** Pass `--metadata-csv <path>`.
+- **User has one already** — they point at a Run Selector download.
+- **User has only accessions** — Claude fetches a runinfo CSV via eutils (see “Expansion via E-utilities” below) and saves it as `<run_dir>/SraRunTable.csv`.
+
+Either way, by the time Step 3 runs, there must be a single run-level CSV at a known path.
+
+## Expansion via E-utilities
+
+When the user supplies non-run accessions and no pre-built CSV, expand via `WebFetch` against NCBI E-utilities. Two endpoints, no auth:
+
+**1. esearch** — translate accession to internal SRA UIDs:
+```
+https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=sra&term=<TERM>&retmax=100000
+```
+Response is XML with `<Id>` elements. Build `<TERM>` from the accession kind.
+
+**2. efetch** — get a runinfo CSV for those UIDs:
+```
+https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=sra&id=<COMMA-SEPARATED-UIDS>&rettype=runinfo&retmode=text
+```
+Response is a CSV with appropriate columns.
+
+**Save the efetch response unchanged to `<run_dir>/SraRunTable.csv`.**
+
+**Politeness** — NCBI rate-limits anonymous traffic to ~3 req/s. Do not exceed rate-limits when having many accesisons to expand. 
+
+**Manual fallback** — if `WebFetch` fails or the user prefers, point them at `https://www.ncbi.nlm.nih.gov/Traces/study/?acc=<their-accession>` to download the metadata table and get back to you.
 
 ## Workflow steps
 
 These are the procedures to follow. Copy this checklist and tick items as you go:
 
 ```
-- [ ] 0. Run `bash scripts/setup.sh`
-- [ ] 1. Collect accessions + choose metadata source
-- [ ] 2. Configure SLURM directives (use Step 1 data to suggest resources)
-- [ ] 3. Validate + expand accessions
+- [ ] 0. Setup
+- [ ] 1. Collect all inputs
+- [ ] 2. Configure SLURM directives 
+- [ ] 3. Validate the metadata CSV
 - [ ] 4. Resolve database
 - [ ] 5. Build samplesheet + runs.txt
 - [ ] 6. Render submit_metascope.sh
-- [ ] 7. Preflight (incl. `nextflow run -preview`)
+- [ ] 7. Preflight
 - [ ] 8. Present `sbatch` command + post-submission guidance
 ```
 
-### Step 0: Setup (idempotent)
+### Step 0: Setup
 For setup for the first-time use, use the convenience script `scripts/setup.sh`:
 ```
 bash scripts/setup.sh
@@ -61,11 +82,18 @@ The script installs python deps if any are missing, handles HPC `module load` de
 After `setup.sh`, subsequent skill scripts can be invoked by activating the venv (`source ./metascope-microbiome/venv/bin/activate`).
 
 ### Step 1: Collect inputs
-Ask the user if any input had not been provided:
-1. **Accessions** — file path, or paste them inline.
-2. **Metadata source** — auto-fetch or file path.
+Ask the user for whichever of these isn't already in hand:
+1. **Accessions** — pasted inline or a file path.
+2. **Metadata CSV (optional)** — path to a Run Selector / runinfo CSV, if they already have one.
+3. **FASTQ storage** — two questions, in order:
+   - **Where to store the downloaded FASTQs?** Default: `<run_dir>/fastq` (kept alongside the rest of the run's outputs). Alternate: a path under the user's scratch (suggest `<scratch_dir>/<job_name>/fastq` ). Use this answer for `--fastq-dir` in Steps 5 and 6 — both scripts must receive the same value.
+   - **Remove FASTQs after the pipeline finishes successfully?** Yes/no. If the user says yes, pass `--remove-fastq-after-run` to Step 6 — `rm -rf "$FASTQ_DIR"` will be appended to the rendered SLURM script, gated on Nextflow success.
 
-Wait for both answers before continuing.
+Then, before proceeding:
+- If **any accession isn't a run** (SRR/ERR/DRR) and no run-level CSV was provided, run the eutils expansion (see "Expansion via E-utilities" above) and save the runinfo CSV to `<run_dir>/SraRunTable.csv`.
+- If **only runs were provided** and no metadata was given, you can either skip metadata fetching (you only need `LibraryLayout` for the samplesheet — ask the user) or fetch via efetch over the runs themselves to populate the CSV.
+
+By the time Step 3 begins, there is one run-level CSV at a known path.
 
 ### Step 2: Configure SLURM directives (ask the user)
 
@@ -85,21 +113,32 @@ If a saved cache exists at `./metascope-microbiome/SLURM_directives.yaml`, offer
 | Outdir         | Where pipeline results land. Default: `.`                               | `--outdir`       |
 | Log dir        | SLURM stdout/stderr. Default: `./logs`.                                 | `--log-dir`      |
 
+**Hardcoded `module_loads` (do NOT ask the user).** The array task needs these modules to find Python, fastq-dump, and Nextflow on Amarel. The template also extends `MODULEPATH` to include `/projects/community/modulefiles` before these run. Always pass this exact value via `--module-loads`:
+```
+module load python
+module load sratoolkit
+module load nextflow
+module load java
+module load singularity
+```
+
 When the user is happy, offer to save the answers to `./metascope-microbiome/SLURM_directives.yaml`.
 
-### Step 3: Validate + expand
-To validate and/or expand the user's inputs, use the script `scripts/validate_inputs.py`.
+
+### Step 3: Validate the metadata CSV
+Use `scripts/validate_inputs.py` to verify the run-level CSV and write the table that downstream steps consume.
 ```
 python3 scripts/validate_inputs.py \
-  (--accessions-file <path> | --accessions-inline "SRR123,SRR456,...") \
-  [--metadata-csv <path>] \
+  --metadata-csv <run_dir>/SraRunTable.csv \
   --output <run_dir>/expanded_metadata.csv
 ```
-One of `--accessions-file` or `--accessions-inline` is required. Pass `--metadata-csv` to use user-supplied annotations; omit to auto-fetch from NCBI.
+
+If the validator complains that an accession isn't a run, expansion was missed in Step 1 — go back, run eutils, then re-run.
 
 Outputs:
-- `<run_dir>/expanded_metadata.csv` (always; via `--output`) — validated and expanded metadata for downstream steps.
-- `<run_dir>/SraRunTable.csv` (only when auto-fetching) — Run Selector–format dump of the source metadata for the user to inspect. Same shape as a manual download from NCBI Run Selector.
+- `<run_dir>/expanded_metadata.csv` — validated run-level metadata (`sample_id, run_accession, library_layout`).
+
+**Multi-run-per-sample.** The validator allows the same `sample_id` on multiple rows when one biosample has multiple runs (`(sample_id, accession)` pairs must still be unique). Downstream, the samplesheet has matching `sample` values across rows with different fastq paths — the nf-core "multiple lanes per sample" pattern; the Nextflow pipeline merges these per sample.
 
 ### Step 4: Resolve database (interactive)
 
@@ -150,19 +189,19 @@ Paths are user-supplied and optionally cached at `./metascope-microbiome/databas
    Future runs can just pick the name from the cache. Skip if the user says no.
 
 ### Step 5: Build samplesheet + runs list
-To build the samplesheet for Nextflow input and run list for array rendering, use `scripts/build_samplesheet.py`:
+To build the samplesheet for Nextflow input and run list for array rendering, use `scripts/build_samplesheet.py`. Pass the same `--fastq-dir` the user picked in Step 1 (default `<run_dir>/fastq`):
 ```
 python3 scripts/build_samplesheet.py \
   --expanded-metadata <run_dir>/expanded_metadata.csv \
-  --fastq-dir <scratch_dir>/fastq \
+  --fastq-dir <run_dir>/fastq \
   --samplesheet <run_dir>/samplesheet.csv \
   --runs <run_dir>/runs.txt
 ```
-Predicts paths like `<scratch_dir>/fastq/<RUN>_1.fastq.gz` and writes both the nf-core samplesheet and a `runs.txt` (unique runs, one per line). Point the user to both files for sanity-checking.
+Predicts paths like `<run_dir>/fastq/<RUN>_1.fastq.gz` (or wherever the user put `--fastq-dir`) and writes both the nf-core samplesheet and a `runs.txt` (unique runs, one per line). Point the user to both files for sanity-checking.
 
 ### Step 6: Render submission script
 
-Invoke `scripts/render_submission.py` to produce `<output-dir>/submit_metascope.sh` — the SLURM array script the user will submit.
+Invoke `scripts/render_submission.py` to produce `<output-dir>/submit_metascope.sh` — the SLURM array script the user will submit. Pass the same `--fastq-dir` from Step 5; add `--remove-fastq-after-run` if the user opted into post-run cleanup in Step 1.
 
 ```
 python3 scripts/render_submission.py \
@@ -170,8 +209,9 @@ python3 scripts/render_submission.py \
   --db-config ./metascope-microbiome/databases.yaml --database <key> \
   --runs-list <run_dir>/runs.txt \
   --samplesheet <run_dir>/samplesheet.csv \
-  --fastq-dir <scratch_dir>/fastq \
-  --output-dir <run_dir>
+  --fastq-dir <run_dir>/fastq \
+  --output-dir <run_dir> \
+  [--remove-fastq-after-run]
 ```
 
 ### Step 7: Preflight
@@ -219,6 +259,10 @@ sbatch <run_dir>/submit_metascope.sh
 
 **If something fails:**
 - Single fetch task failed: re-submit just that index — `sbatch --array=<failed_index> submit_metascope.sh`.
+- `prefetch: cannot connect`: the compute node lacks outbound network. `fastq-dump` on a node with connectivity, or pre-stage with `prefetch` from the login node.
+- `disk full` after fetching a few SRRs: `--fastq-dir` is on a quota-limited filesystem — point it at scratch.
+- Empty FASTQs: the run is access-controlled (dbGaP). The skill won't bypass authorization; check with NCBI.
+- Files named `<SRR>.fastq.gz` even for paired-end: `--split-files` got dropped from the rendered template — re-render.
 - Pipeline error: check the log for the failing task. **Do not edit the nf-core/metascopeprolifer pipeline source**; report bugs there. The skill's role ends at producing a valid submission.
 
 ## Outputs
@@ -234,20 +278,9 @@ After the user runs `sbatch`:
 - Logs in `<log_dir>` as `slurm.<job-name>.<arrayid>_<task>.out`.
 - A MultiQC HTML report under `<outdir>/multiqc/` per nf-core convention.
 
-## Error handling
-
-Common failures and what to do:
-- Validator fails: show every error at once (the script does this); fix the metadata or SRR list and re-run step 3.
-- `<...>` placeholder remains in rendered output: a cached YAML is incomplete. Tell the user which field; they edit and re-render.
-- fastq-dump fails inside the SLURM job: see `references/sra-toolkit.md` "Known failure modes".
-- Nextflow can't find a database file: a path collected in Step 4 is wrong or unreachable from compute nodes. Ask users to verify the path and assist them with helpful terminal command.
-
 ## References
 
 | You need to know… | Read |
 |--|--|
 | MetaScope Nextflow pipeline params, samplesheet schema, version | `references/metascope-nextflow.md` |
-| fastq-dump invocation, module loading, common failures | `references/sra-toolkit.md` |
-| Rutgers SLURM placeholders, what's generic vs. site-specific | `references/rutgers-hpc.md` |
-| Metadata CSV format, validation rules, samplesheet mapping | `references/metadata-schema.md` |
 

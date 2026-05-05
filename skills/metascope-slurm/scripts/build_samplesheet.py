@@ -11,7 +11,7 @@ Predicts FASTQ paths from `fastq-dump --split-files --gzip` naming:
   paired:  <fastq_dir>/<RUN>_1.fastq.gz, <fastq_dir>/<RUN>_2.fastq.gz
   single:  <fastq_dir>/<RUN>.fastq.gz
 
-Schema: references/metadata-schema.md, references/metascope-nextflow.md
+Schema: references/metascope-nextflow.md
 """
 from __future__ import annotations  # makes type hints lazy → 3.7+ compatible
 
