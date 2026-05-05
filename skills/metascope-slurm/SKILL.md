@@ -56,6 +56,14 @@ Response is a CSV with appropriate columns.
 
 **Manual fallback** — if `WebFetch` fails or the user prefers, point them at `https://www.ncbi.nlm.nih.gov/Traces/study/?acc=<their-accession>` to download the metadata table and get back to you.
 
+## Interaction style: use `AskUserQuestion` for choice-style prompts
+
+When you need the user to pick from a discrete set of options — yes/no, "use cache vs override", "pick which cached database" — use Claude Code's `AskUserQuestion` tool rather than asking in plain chat. It surfaces options as buttons with a structured UI and auto-adds an "Other" option for free-text. Each call: 2–4 options per question, up to 4 questions per turn, mark the recommended choice with "(Recommended)" and put it first.
+
+For free-text inputs (paths, SRA accessions, sample IDs, job-name strings, scratch paths) — just ask in chat. There's nothing to enumerate, and a structured UI would be friction.
+
+When several choice-style questions are related (e.g. FASTQ storage location + cleanup choice in Step 1.3), batch them into a single `AskUserQuestion` call — fewer turns, less friction.
+
 ## Workflow steps
 
 These are the procedures to follow. Copy this checklist and tick items as you go:
@@ -90,9 +98,9 @@ For subsequent steps, prefer invoking Python scripts via the venv's python direc
 Ask the user for whichever of these isn't already in hand:
 1. **Accessions** — pasted inline or a file path.
 2. **Metadata CSV (optional)** — path to a Run Selector / runinfo CSV, if they already have one.
-3. **FASTQ storage** — two questions, in order:
-   - **Where to store the downloaded FASTQs?** Default: `<run_dir>/fastq` (kept alongside the rest of the run's outputs). Alternate: a path under the user's scratch (suggest `<scratch_dir>/<job_name>/fastq` ). Use this answer for `--fastq-dir` in Steps 5 and 6 — both scripts must receive the same value.
-   - **Remove FASTQs after the pipeline finishes successfully?** Yes/no. If the user says yes, pass `--remove-fastq-after-run` to Step 6 — `rm -rf "$FASTQ_DIR"` will be appended to the rendered SLURM script, gated on Nextflow success.
+3. **FASTQ storage** — batch as one `AskUserQuestion` call with two questions:
+   - **Where to store FASTQs?** Options: `Run dir: <run_dir>/fastq (Recommended)`, `Scratch: <scratch_dir>/<job_name>/fastq`. Use the answer as `--fastq-dir` in Steps 5 and 6 (both scripts must receive the same value).
+   - **Remove FASTQs after the pipeline succeeds?** Options: `Keep FASTQs (Recommended)`, `Remove on success`. If the user picks remove, pass `--remove-fastq-after-run` to Step 6 — `rm -rf "$FASTQ_DIR"` is appended to the rendered SLURM script, gated on Nextflow success.
 
 Then, before proceeding:
 - If **any accession isn't a run** (SRR/ERR/DRR) and no run-level CSV was provided, run the eutils expansion (see "Expansion via E-utilities" above) and save the runinfo CSV to `<run_dir>/SraRunTable.csv`.
@@ -104,7 +112,7 @@ By the time Step 3 begins, there is one run-level CSV at a known path.
 
 Walk through these values one at a time. Use the data from Step 1 to suggest informed hints. Accept whatever the user provides.
 
-**Cache handling — always ask the user, never silently apply.** If a saved cache exists at `./metascope-microbiome/SLURM_directives.yaml`, show its contents to the user and explicitly ask: "Use the cached values as-is, override specific fields, or start fresh?" Do not assume the user wants the cache. After they decide, only walk through the fields they want to change (if any).
+**Cache handling — always ask the user, never silently apply.** If a saved cache exists at `./metascope-microbiome/SLURM_directives.yaml`, show its contents to the user, then use `AskUserQuestion` with three options: `Use as-is (Recommended)`, `Override specific fields`, `Start fresh`. Do not assume the user wants the cache — they may be running a different study, partition, or memory profile. After they decide, only walk through the fields they want to change (if any). For the field-by-field overrides, use plain chat (the inputs are free-text: time strings, integers, paths).
 
 | Field          | YAML key         | CLI flag         | Hint / example                                                |
 |----------------|------------------|------------------|---------------------------------------------------------------|
@@ -167,7 +175,7 @@ Paths are user-supplied and optionally cached at `./metascope-microbiome/databas
    ```
    If the file does not exist, skip to step 3.
 
-2. **Always ask the user, never auto-pick.** Explicitly ask: "Use cached entry `<name>` as-is, override one of its paths, or supply a brand-new database?"
+2. **Always ask the user, never auto-pick.** Use `AskUserQuestion` with one option per cached entry (e.g. `Use silva_138 (16S)`) plus a final `Supply a brand-new database` option. The tool caps at 4 options per question — if there are more than 3 cached entries, list the 3 most-likely-relevant and rely on the auto-added `Other` option for the rest. Even when only one cached entry exists, still ask — do not auto-pick.
 
 3. **Collect paths** (when picking new, or no cache exists). Walk through one at a time; accept whatever the user provides:
 
