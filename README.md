@@ -91,10 +91,8 @@ Recommended. Everything happens on a single login node, and all the paths you gi
 1. SSH into an Amarel login node (`ssh <netid>@amarel.rutgers.edu`) or use the Ondemand interface.
 2. Start Claude Code in a project directory — your personal home directory is not recommanded because of quota limits.
 3. Invoke the skill with inputs and optional requirements.
-4. At the end of the skill, `sbatch` the submission script:
-   ```bash
-   sbatch submit_metascope.sh
-   ```
+4. At step 8 of the skill, use the `sbatch` command provided to submit the script
+
 
 ### Scenario B: Running the skill on a personal computer
 
