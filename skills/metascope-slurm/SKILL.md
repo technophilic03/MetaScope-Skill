@@ -73,16 +73,18 @@ These are the procedures to follow. Copy this checklist and tick items as you go
 ```
 
 ### Step 0: Setup
-For setup for the first-time use, use the convenience script `scripts/setup.sh`:
+For first-time use, run this block:
 ```
-export MODULEPATH=$MODULEPATH:/projects/community/modulefiles # if Claude is on Amarel.
+if [ -d /projects/community/modulefiles ]; then
+    export MODULEPATH=$MODULEPATH:/projects/community/modulefiles
+    module load python
+    module load nextflow
+fi
 bash scripts/setup.sh
 ```
-The script requires Python >= 3.7. If the system `python3` is missing or too old, the script tries `module load python` automatically. 
+`scripts/setup.sh` requires Python >= 3.7.  After deps install (`pyyaml`, `jinja2`), it creates a dedicated venv at `<skill-dir>/venv/`. Safe to re-run every session.
 
-It then installs the deps (`pyyaml`, `jinja2`) if missing and creates a dedicated venv. Safe to run every session — skips packages already importable.
-
-After `setup.sh`, prefer invoking subsequent scripts via the venv's python directly (`./venv/bin/python3 scripts/...`) rather than activating the venv with `source` — `source` doesn't persist across non-interactive subshells, which is how skills are typically invoked.
+For subsequent steps, prefer invoking Python scripts via the venv's python directly (`./venv/bin/python3 scripts/...`).
 
 ### Step 1: Collect inputs
 Ask the user for whichever of these isn't already in hand:
@@ -102,7 +104,7 @@ By the time Step 3 begins, there is one run-level CSV at a known path.
 
 Walk through these values one at a time. Use the data from Step 1 to suggest informed hints. Accept whatever the user provides.
 
-If a saved cache exists at `./metascope-microbiome/SLURM_directives.yaml`, offer it as defaults. If the user accepts, only ask about values they want to change.
+**Cache handling — always ask the user, never silently apply.** If a saved cache exists at `./metascope-microbiome/SLURM_directives.yaml`, show its contents to the user and explicitly ask: "Use the cached values as-is, override specific fields, or start fresh?" Do not assume the user wants the cache. After they decide, only walk through the fields they want to change (if any).
 
 | Field          | YAML key         | CLI flag         | Hint / example                                                |
 |----------------|------------------|------------------|---------------------------------------------------------------|
@@ -156,16 +158,16 @@ MetaScope needs up to five reference paths (filter is optional):
 
 Paths are user-supplied and optionally cached at `./metascope-microbiome/databases.yaml`.
 
-1. **Check the cache.** If `./metascope-microbiome/databases.yaml` exists, list its entries with their `type`:
+1. **Check the cache and show its contents.** If `./metascope-microbiome/databases.yaml` exists, list its entries with their `type`:
    ```
    # Example
    Cached databases:
      silva_138 (16S)
      my_shotgun_db (shotgun)
    ```
-   If the file does not exist, skip this step.
+   If the file does not exist, skip to step 3.
 
-2. **Ask which one.** "Pick a cached entry, or supply paths for a new database."
+2. **Always ask the user, never auto-pick.** Explicitly ask: "Use cached entry `<name>` as-is, override one of its paths, or supply a brand-new database?"
 
 3. **Collect paths** (when picking new, or no cache exists). Walk through one at a time; accept whatever the user provides:
 
