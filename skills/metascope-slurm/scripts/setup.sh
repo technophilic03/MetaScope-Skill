@@ -105,6 +105,12 @@ if [[ ${#missing[@]} -eq 0 ]]; then
 fi
 
 # -- Install -----------------------------------------------------------------
+# Upgrade pip first. Amarel's `module load python` (core 3.8.2) bundles an
+# ancient pip (19.2.3, 2019-vintage) that fails on modern PEP 517 sdists with
+# `BackendUnavailable`. A modern pip handles the same install fine.
+echo "Upgrading pip in $target_label..."
+"$install_python" -m pip install --upgrade pip --quiet
+
 echo "Installing into $target_label: ${missing[*]}"
 "$install_python" -m pip install "${missing[@]}"
 
