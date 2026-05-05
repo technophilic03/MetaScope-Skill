@@ -9,7 +9,9 @@ Read expanded_metadata.csv (post-validation/expansion) and write:
 
 Predicts FASTQ paths from `fastq-dump --split-files --gzip` naming:
   paired:  <fastq_dir>/<RUN>_1.fastq.gz, <fastq_dir>/<RUN>_2.fastq.gz
-  single:  <fastq_dir>/<RUN>.fastq.gz
+  single:  <fastq_dir>/<RUN>_1.fastq.gz
+(`--split-files` always appends `_1` even for single-end runs; only the bare
+`fastq-dump` command — which we don't use — produces `<RUN>.fastq.gz`.)
 
 Schema: references/metascope-nextflow.md
 """
@@ -34,7 +36,7 @@ def predict_fastq_paths(run: str, layout: str, fastq_dir: Path) -> tuple[str, st
             str(fastq_dir / f"{run}_2.fastq.gz"),
         )
     if layout == "single":
-        return (str(fastq_dir / f"{run}.fastq.gz"), "")
+        return (str(fastq_dir / f"{run}_1.fastq.gz"), "")
     raise ValueError(f"unknown library_layout '{layout}' for run '{run}'")
 
 

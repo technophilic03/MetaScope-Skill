@@ -297,7 +297,7 @@ sbatch <run_dir>/submit_metascope.sh
 - `prefetch: cannot connect`: the compute node lacks outbound network. `fastq-dump` on a node with connectivity, or pre-stage with `prefetch` from the login node.
 - `disk full` after fetching a few SRRs: `--fastq-dir` is on a quota-limited filesystem — point it at scratch.
 - Empty FASTQs: the run is access-controlled (dbGaP). The skill won't bypass authorization; check with NCBI.
-- Files named `<SRR>.fastq.gz` even for paired-end: `--split-files` got dropped from the rendered template — re-render.
+- Preflight `samplesheet references files not on disk` for single-end runs pointing at `<SRR>.fastq.gz` (no `_1`): the samplesheet was built with an older `build_samplesheet.py` that predicted the wrong single-end name. `fastq-dump --split-files` emits `<SRR>_1.fastq.gz` even for single-end. Re-run Step 5 with the current builder, then re-submit (the fetch step is idempotent).
 - Pipeline error: check the log for the failing task. **Do not edit the nf-core/metascopeprolifer pipeline source**; report bugs there. The skill's role ends at producing a valid submission.
 
 ## Outputs
