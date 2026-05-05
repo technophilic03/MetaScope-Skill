@@ -75,11 +75,14 @@ These are the procedures to follow. Copy this checklist and tick items as you go
 ### Step 0: Setup
 For setup for the first-time use, use the convenience script `scripts/setup.sh`:
 ```
+export MODULEPATH=$MODULEPATH:/projects/community/modulefiles # if Claude is on Amarel.
 bash scripts/setup.sh
 ```
-The script installs python deps if any are missing, handles HPC `module load` detection, and creates a dedicated venv. Safe to run every session — it skips packages that are already importable.
+The script requires Python >= 3.7. If the system `python3` is missing or too old, the script tries `module load python` automatically. 
 
-After `setup.sh`, subsequent skill scripts can be invoked by activating the venv (`source ./metascope-microbiome/venv/bin/activate`).
+It then installs the deps (`pyyaml`, `jinja2`) if missing and creates a dedicated venv. Safe to run every session — skips packages already importable.
+
+After `setup.sh`, prefer invoking subsequent scripts via the venv's python directly (`./venv/bin/python3 scripts/...`) rather than activating the venv with `source` — `source` doesn't persist across non-interactive subshells, which is how skills are typically invoked.
 
 ### Step 1: Collect inputs
 Ask the user for whichever of these isn't already in hand:

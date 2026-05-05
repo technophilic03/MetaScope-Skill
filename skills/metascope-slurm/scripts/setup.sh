@@ -27,23 +27,41 @@ DEPS=(
 
 PYTHON="${PYTHON:-python3}"
 
-# If python3 isn't on PATH, try `module load python` once (Rutgers Amarel
-# convention) before giving up. If `module` isn't a shell function, the
-# user isn't on HPC and just doesn't have Python — go straight to error.
-if ! command -v "$PYTHON" >/dev/null 2>&1; then
+# Returns 0 iff $PYTHON is on PATH AND its version is >= 3.7. The 3.7 floor
+# comes from `from __future__ import annotations`, used across this skill's
+# scripts; older Python errors with a SyntaxError at parse time.
+check_py_ok() {
+    command -v "$PYTHON" >/dev/null 2>&1 \
+        && "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 7) else 1)' 2>/dev/null
+}
+
+# If $PYTHON is missing OR too old, try `module load python` once (Rutgers
+# Amarel convention) before giving up. If `module` isn't a shell function, the user isn't on HPC and we
+# go straight to error.
+if ! check_py_ok; then
+    cur_ver="(not on PATH)"
+    if command -v "$PYTHON" >/dev/null 2>&1; then
+        cur_ver=$("$PYTHON" --version 2>&1 || echo unknown)
+    fi
     if type module >/dev/null 2>&1; then
-        echo "$PYTHON not on PATH. Trying 'module load python'..."
+        echo "Need Python >= 3.7 (got: $cur_ver). Trying 'module load python'..."
         module load python >/dev/null 2>&1 || true
     fi
 
-    if ! command -v "$PYTHON" >/dev/null 2>&1; then
-        echo "ERROR: '$PYTHON' not on PATH." >&2
-        echo "  - On HPC: run 'module avail python' to find a Python module, then" >&2
-        echo "    'module load <name>' before re-running this script." >&2
-        echo "  - Otherwise: install Python 3.7+, or set PYTHON=<path-to-python3>." >&2
+    if ! check_py_ok; then
+        cur_ver="(not on PATH)"
+        if command -v "$PYTHON" >/dev/null 2>&1; then
+            cur_ver=$("$PYTHON" --version 2>&1 || echo unknown)
+        fi
+        echo "ERROR: '$PYTHON' is missing or older than 3.7 (got: $cur_ver)." >&2
+        echo "  - On HPC: run 'module avail python' to find a 3.7+ module," >&2
+        echo "    then 'module load <name>' (or set PYTHON=<path>) and re-run." >&2
+        echo "  - Otherwise: install Python >= 3.7, or set PYTHON=<path-to-python3.7+>." >&2
         exit 1
     fi
 fi
+
+echo "Using $("$PYTHON" --version 2>&1) at $("$PYTHON" -c 'import sys; print(sys.executable)')"
 
 # -- Pick install target -----------------------------------------------------
 if [[ -n "${VIRTUAL_ENV:-}" ]]; then
