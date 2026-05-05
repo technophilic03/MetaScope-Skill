@@ -1,33 +1,106 @@
 # MetaScope SLURM
 
-Claude Code skill that generates Rutgers Amarel SLURM submission scripts wrapping [nf-core/metascopeprolifer](https://github.com/hjfan527/nf-core-metascopeprolifer) for 16S / shotgun-metagenomic taxonomic profiling.
+> Claude Code skill that turns SRA accessions into a ready-to-`sbatch` SLURM array script for [nf-core/metascopeprolifer](https://github.com/hjfan527/nf-core-metascopeprolifer) on Rutgers Amarel.
 
-Given SRA accessions and a metadata table, the skill:
-1. Fetches a runinfo CSV via NCBI E-utilities when the user provides non-run accessions (BioProject, SRX, GSE, …).
+## Tested agent CLIs
+
+The skill format (`SKILL.md` + `/plugin marketplace`) is Claude Code-native, so other CLIs would need to invoke `scripts/*.py` manually rather than loading the skill as a plugin.
+
+| CLI | Model family | Status |
+| --- | --- | --- |
+| [Claude Code](https://code.claude.com/docs/en/overview) | Claude (Opus 4.x, Sonnet 4.x) | ✅ Tested |
+| [OpenAI Codex CLI](https://github.com/openai/codex) | GPT-5.x | Untested |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Gemini xx | Untested |
+
+## Overview
+
+Give the skill SRA accessions and a metadata table; it gives you back **one** SLURM array script for 16S / shotgun-metagenomic taxonomic profiling.
+
+Under the hood the skill:
+
+1. Expands non-run accessions (BioProject, SRX, GSE, …) into a runinfo CSV via NCBI E-utilities.
 2. Builds an nf-core samplesheet from the run-level data.
-3. Renders **one SLURM array script** that fans `fastq-dump` across array tasks, then runs Nextflow once after all fetches complete.
+3. Renders a SLURM array that fans `fastq-dump` across array tasks, then runs Nextflow once after every fetch finishes.
+
+The skill never calls `sbatch` itself — it prints the command for you to run.
 
 ## Requirements
 
-- **Claude Code** — see "Install Claude Code" below.
-- **Python ≥ 3.7** on the machine where Claude Code runs the skill (e.g. an Amarel login node). The skill auto-loads via `module load python` if the system `python3` is missing or too old.
-- **Pre-built reference databases** — a Bowtie2 index, a BLAST database, and an `accessionTaxa.sql` file. See `skills/metascope-slurm/references/metascope-nextflow.md` for what each one is.
-- Rutgers Amarel access (or another SLURM cluster — directives may need adaptation).
+| | |
+| --- | --- |
+| Claude Code | install via Anthropic's [official guide](https://code.claude.com/docs/en/overview); verify with `claude --version`. |
+| Python | ≥ 3.7 on the machine running the skill. |
+| Reference databases | a Bowtie2 index, a BLAST database, and an `accessionTaxa.sql` file. See [`skills/metascope-slurm/references/metascope-nextflow.md`](skills/metascope-slurm/references/metascope-nextflow.md). |
 
-## Install Claude Code
+## Install
 
-Follow Anthropic's official instructions: <https://docs.claude.com/en/docs/agents-and-tools/claude-code>. Verify with `claude --version`.
-
-## Install this skill
-
-Inside a Claude Code session:
+Inside a Claude Code session, use the following command to install the skill:
 
 ```
 /plugin marketplace add technophilic03/MetaScope-Skill
 /plugin install metascope-slurm@Metascope_skill
 ```
+Alternatively, you can install the skill interactively by entering `/plugin`, go to `Marketplaces` tab and `+ Add Marketplaces`, then enter `technophilic03/MetaScope-Skill` as the marketplace source.
 
-**If `/plugin marketplace add` errors with `unknown option 'shallow-submodules'`** (older git, < 2.9), pre-clone the repo and add it as a local marketplace:
+
+To pick up updates of the skill later, you can run `/plugin marketplace update` or update interactively under the `Marketplaces` tab:
+
+
+## Usage
+
+Invoke the skill in natural language — for example:
+
+```
+/metascope-slurm generate an Amarel submission script for MetaScope on PRJNA242354. Choose 10 random runs.
+```
+
+**Inputs:**
+- accession number(s)
+- Metadata.csv from NCBI Run selector (optional)
+
+Claude will walk you through six stages, regardless of where you're running:
+
+| Stage | What happens |
+| --- | --- |
+| 1. Setup | Installs Python deps once into a dedicated venv inside the skill. |
+| 2. Inputs | Collects accessions and the FASTQ destination (default `<run_dir>/fastq`). |
+| 3. SLURM directives | Asks for partition, time, memory, scratch dir, etc. Cached at `./metascope-microbiome/SLURM_directives.yaml`. |
+| 4. Database paths | Asks for Bowtie2 / BLAST / `accessionTaxa.sql` paths. Optionally cached at `./metascope-microbiome/databases.yaml`. |
+| 5. Render + preflight | Produces `submit_metascope.sh` and runs static checks. |
+| 6. You submit | The skill prints `sbatch submit_metascope.sh` for you to execute. |
+
+The skill itself only generates a script — the script always runs on Amarel. The two scenarios below differ only in *where you invoke Claude Code* and how the rendered script gets to the cluster.
+
+### Scenario A: Running the skill on Amarel
+
+Recommended. Everything happens on a single login node, and all the paths you give the skill (FASTQ dir, scratch, databases) are the same paths the SLURM job will see.
+
+1. SSH into an Amarel login node (`ssh <netid>@amarel.rutgers.edu`) or use the Ondemand interface.
+2. Start Claude Code in a project directory — your personal home directory is not recommanded because of quota limits.
+3. Invoke the skill with inputs and optional requirements.
+4. At the end of the skill, `sbatch` the submission script:
+   ```bash
+   sbatch submit_metascope.sh
+   ```
+
+### Scenario B: Running the skill on a personal computer
+
+You generate the script locally, then transfer it to Amarel for submission.
+
+1. Install Claude Code locally, ensure Python ≥ 3.7 is on your `PATH` (`python3 --version`), and have Nextflow installed.
+2. Start Claude Code in any working directory and invoke the skill as shown above.
+3. **When the skill asks for paths, give it the Amarel-side paths**, not local ones.
+4. After Stage 5, transfer the rendered run directory to Amarel. Everything the job needs lives under the run dir (script, samplesheet, `runs.txt`, cached configs)
+5. Submit
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `/plugin marketplace add` errors with `unknown option 'shallow-submodules'` | git < 2.9 | Pre-clone the repo and add it as a local marketplace (see below). |
+| `/plugin install` fails with a glibc / SSH error | The loaded git module ships an `ssh` binary incompatible with the system glibc | Force HTTPS clones: `git config --global url.https://github.com/.insteadOf git@github.com:` |
+
+**Local-marketplace fallback** for the first symptom:
 
 ```bash
 git clone https://github.com/technophilic03/MetaScope-Skill.git ~/code/MetaScope-Skill
@@ -40,42 +113,7 @@ then inside Claude Code:
 /plugin install metascope-slurm@Metascope_skill
 ```
 
-**If `/plugin install` fails with a glibc / SSH error**, the loaded git module brought along an `ssh` binary that's incompatible with the system glibc. Force HTTPS clones:
+## Further reading
 
-```bash
-git config --global url.https://github.com/.insteadOf git@github.com:
-```
-
-## Run it
-
-Describe your run to Claude in natural language. For example:
-
-```
-/metascope-slurm generate an Amarel submission script for MetaScope on PRJNA242354. Choose 10 random runs.
-```
-
-Claude will walk you through:
-
-1. **Setup** — installs Python deps once, into a dedicated venv inside the skill.
-2. **Inputs** — your accessions; where to put the downloaded FASTQs (default `<run_dir>/fastq`).
-3. **SLURM directives** — partition, time, memory, scratch dir, etc. Cached at `./metascope-microbiome/SLURM_directives.yaml` for re-use.
-4. **Database paths** — Bowtie2 index, BLAST DB, accessionTaxa.sql. Optionally cached at `./metascope-microbiome/databases.yaml`.
-5. **Render + preflight** — produces `submit_metascope.sh` with full static checks.
-6. **You run** `sbatch submit_metascope.sh`.
-
-The skill never submits the job for you — it produces the script and shows the `sbatch` command.
-
-## Updating the skill
-
-When new commits land in this repo:
-
-```
-/plugin marketplace update
-```
-
-then re-install if needed.
-
-## More
-
-- Full skill behavior + workflow steps: `skills/metascope-slurm/SKILL.md`
-- Pipeline parameters and ref preference order: `skills/metascope-slurm/references/metascope-nextflow.md`
+- Full skill behavior and step-by-step workflow: [`skills/metascope-slurm/SKILL.md`](skills/metascope-slurm/SKILL.md)
+- Pipeline parameters and reference-database preference order: [`skills/metascope-slurm/references/metascope-nextflow.md`](skills/metascope-slurm/references/metascope-nextflow.md)
