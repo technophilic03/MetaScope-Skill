@@ -51,7 +51,7 @@ git config --global url.https://github.com/.insteadOf git@github.com:
 Describe your run to Claude in natural language. For example:
 
 ```
-generate an Amarel submission script for MetaScope on PRJNA242354. Choose 10 random runs.
+/metascope-slurm generate an Amarel submission script for MetaScope on PRJNA242354. Choose 10 random runs.
 ```
 
 Claude will walk you through:
