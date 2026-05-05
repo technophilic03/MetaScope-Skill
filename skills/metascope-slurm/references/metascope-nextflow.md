@@ -4,11 +4,15 @@ The MetaScope pipeline lives at https://github.com/hjfan527/nf-core-metascopepro
 
 ## Status (verified at construction time)
 
-The pipeline is **under active development**. The README, default config, and test config all contain `TODO nf-core:` markers, and `conf/test.config` has `'TODO'` literal strings for every MetaScope-specific parameter. Treat the pipeline as a moving target — pin to a specific commit SHA in the user's `SLURM_directives.yaml` (`pipeline_ref` field) for reproducibility.
+The pipeline is **under active development**. The README, default config, and test config all contain `TODO nf-core:` markers, and `conf/test.config` has `'TODO'` literal strings for every MetaScope-specific parameter. Treat the pipeline as a moving target — behavior on the `main` branch may shift between runs.
 
-## Heads-up: `nf-core/metascopeprolifer` is not on the registry yet
+## Pipeline ref preference order (try in order; fall back on failure)
 
-The canonical `nextflow run nf-core/metascopeprolifer ...` command **will fail today** — the pipeline is not in the nf-core GitHub org or on the nf-co.re registry. SKILL.md's templates default to `nf-core/metascopeprolifer` because that's the form Howard's README aspires to; if your `nextflow run -preview` errors with "pipeline not found", switch `pipeline_ref` in `SLURM_directives.yaml` to `hjfan527/nf-core-metascopeprolifer` (form #2 below) and re-render. When the pipeline is accepted into nf-co.re, no change to the skill is needed — the canonical name will start resolving.
+The `pipeline_ref` field in `SLURM_directives.yaml` (or the `--pipeline-ref` CLI flag) decides which ref Nextflow uses. **Try in this order; if `nextflow pull` or `nextflow run -preview` fails with upstream bug/error, fall back to the next:**
+
+1. **`hjfan527/nf-core-metascopeprolifer`** — the canonical repo (https://github.com/hjfan527/nf-core-metascopeprolifer).
+2. **`technophilic03/nf-core-metascopeprolifer`** — backup fork at https://github.com/technophilic03/nf-core-metascopeprolifer.
+3. **`nf-core/metascopeprolifer`** — the canonical nf-core shorthand. Not yet published as in this version of metascope-slurm skill.
 
 When compute nodes block outbound traffic, pre-pull on the login node:
 
@@ -34,14 +38,7 @@ nextflow run <pipeline_ref> \
    [--metascope_filter <optional_filter_index>]
 ```
 
-`<pipeline_ref>` accepts (in order of preference):
-
-1. **`nf-core/metascopeprolifer`** — the canonical nf-core shorthand. The pipeline's README is structured for this form (`README.md` line: `nextflow run nf-core/metascopeprolifer ...`). Currently this resolves only if the pipeline is published to the nf-core registry; verify with `nextflow pull nf-core/metascopeprolifer` once.
-2. **`hjfan527/nf-core-metascopeprolifer`** — direct GitHub ref. Works today since that's where the code lives. Use this until the pipeline is officially on nf-core.re.
-3. **`hjfan527/nf-core-metascopeprolifer -r <commit-sha>`** — pinned to a specific revision. Recommended for reproducibility.
-4. **`/projects/<lab>/code/nf-core-metascopeprolifer`** — local clone. Use when login nodes lack outbound git access or for offline runs.
-
-The user's `SLURM_directives.yaml` `pipeline_ref` field decides which form gets baked into the submission script.
+See "Pipeline ref preference order" above for which `<pipeline_ref>` value to use and the fallback procedure when one ref fails to resolve. The user's `SLURM_directives.yaml` `pipeline_ref` field decides which form gets baked into the submission script.
 
 ## Parameters (verbatim from `nextflow_schema.json`)
 
