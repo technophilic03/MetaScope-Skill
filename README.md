@@ -69,6 +69,19 @@ Claude will walk you through six stages, regardless of where you're running:
 | 5. Render + preflight | Produces `submit_metascope.sh` and runs static checks. |
 | 6. You submit | The skill prints `sbatch submit_metascope.sh` for you to execute. |
 
+```
+Example database paths:
+
+Bowtie2: /home/yl2800/wejlab/reflib/2024_blast_16S_bt; 
+
+Path to accessiontaxa: /home/yl2800/wejlab/reflib/2024_accession_taxa 
+
+BLAST: /home/yl2800/wejlab/reflib/2024_blast_16S/16S_ribosomal_RNA  
+# Important: the format is <folder_dir>/<basename>. basename is the file name without extension name (.ndb, .nhr, etc.)
+
+Target index name: 16S_ribosomal_RNA
+```
+
 The skill itself only generates a script — the script always runs on Amarel. The two scenarios below differ only in *where you invoke Claude Code* and how the rendered script gets to the cluster.
 
 ### Scenario A: Running the skill on Amarel
