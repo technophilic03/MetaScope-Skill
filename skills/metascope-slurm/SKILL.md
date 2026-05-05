@@ -104,17 +104,19 @@ Walk through these values one at a time. Use the data from Step 1 to suggest inf
 
 If a saved cache exists at `./metascope-microbiome/SLURM_directives.yaml`, offer it as defaults. If the user accepts, only ask about values they want to change.
 
-| Field          | Hint / example                                                          | CLI flag         |
-|----------------|-------------------------------------------------------------------------|------------------|
-| Partition      | Default: `main`                                                         | `--partition`    |
-| Job name       | Descriptive identifier, e.g., `metascope-run01`.                        | `--job-name`     |
-| Time           | `HH:MM:SS`. Default:`12:00:00`. | `--time`         |
-| CPUs per task  | Default: `16`.                  | `--cpus`         |
-| Memory         | Default: `200G`.         | `--mem`          |
-| Scratch dir    | e.g., `/scratch/<netid>`.                                               | `--scratch-dir`  |
-| Work dir       | Nextflow work dir.                                                      | `--work-dir`     |
-| Outdir         | Where pipeline results land. Default: `.`                               | `--outdir`       |
-| Log dir        | SLURM stdout/stderr. Default: `./logs`.                                 | `--log-dir`      |
+| Field          | YAML key         | CLI flag         | Hint / example                                                |
+|----------------|------------------|------------------|---------------------------------------------------------------|
+| Partition      | `partition`      | `--partition`    | Default: `main`                                               |
+| Job name       | `job_name`       | `--job-name`     | Descriptive identifier, e.g., `metascope-run01`.              |
+| Time           | `default_time`   | `--time`         | `HH:MM:SS`. Default `12:00:00`.                               |
+| CPUs per task  | `default_cpus`   | `--cpus`         | Default `16`.                                                 |
+| Memory         | `default_mem`    | `--mem`          | Default `200G`.                                               |
+| Scratch dir    | `scratch_dir`    | `--scratch-dir`  | Absolute path, e.g. `/scratch/<netid>`.                       |
+| Work dir       | `work_dir`       | `--work-dir`     | Absolute path; Nextflow work dir.                             |
+| Outdir         | `outdir`         | `--outdir`       | Absolute path; pipeline results land here. Default `.`        |
+| Log dir        | `log_dir`        | `--log-dir`      | Absolute path; SLURM stdout/stderr. Default `./logs`.         |
+
+**Note on paths.** All path-style fields above (and the `--fastq-dir` / `--output-dir` / `--samplesheet` / `--runs-list` flags downstream) get absolutized at render time. Passing relative paths is *accepted* but resolved against the user's current working directory at the moment the renderer runs — which is rarely what they want. Prefer absolute paths everywhere. The renderer + builder both call `Path(...).resolve()` to normalize, so the rendered SLURM script's `cd "$WORK_DIR"` doesn't strand any relative reference.
 
 **Hardcoded `module_loads` (do NOT ask the user).** The array task needs these modules to find Python, fastq-dump, and Nextflow on Amarel. The template also extends `MODULEPATH` to include `/projects/community/modulefiles` before these run. Always pass this exact value via `--module-loads`:
 ```
@@ -174,7 +176,9 @@ Paths are user-supplied and optionally cached at `./metascope-microbiome/databas
    | Target reference index name                     | `--db-target`           |
    | Optional host filter index name (blank to skip) | `--db-filter`           |
    | Path to `accessionTaxa.sql`                     | `--db-accession-path`   |
-   | Path to BLAST database                          | `--db-blast-path`          |
+   | BLAST database **prefix** (no extension)        | `--db-blast-path`       |
+
+   **BLAST DB path is a prefix, not a directory or a file.** A BLAST database is a set of files sharing a common basename — e.g., `16S_ribosomal_RNA.nhr`, `.nin`, `.nsq`, `.ndb` in directory `/path/to/2024_blast_16S/`. Pass the directory + basename without extension: `/path/to/2024_blast_16S/16S_ribosomal_RNA`. Passing just the directory, or pointing at a single `.nhr` file, will fail.
 
 4. **Show summary + confirm.** Echo back the resolved 5 paths before rendering.
 
@@ -189,7 +193,9 @@ Paths are user-supplied and optionally cached at `./metascope-microbiome/databas
        metascope_accession_path: <…>
        metascope_db_path: <…>
    ```
-   Future runs can just pick the name from the cache. Skip if the user says no.
+   Future runs can just pick the name from the cache.
+
+   **If the user declines to save**, that's a clean code path — *do not* write a stub YAML to disk just to satisfy the renderer. In Step 6, omit `--db-config` entirely and pass all collected paths via `--db-*` flags. The renderer treats this as an ad-hoc run and uses `custom` as the database label in the rendered script's header comment.
 
 ### Step 5: Build samplesheet + runs list
 To build the samplesheet for Nextflow input and run list for array rendering, use `scripts/build_samplesheet.py`. Pass the same `--fastq-dir` the user picked in Step 1 (default `<run_dir>/fastq`):
@@ -206,6 +212,7 @@ Predicts paths like `<run_dir>/fastq/<RUN>_1.fastq.gz` (or wherever the user put
 
 Invoke `scripts/render_submission.py` to produce `<output-dir>/submit_metascope.sh` — the SLURM array script the user will submit. Pass the same `--fastq-dir` from Step 5; add `--remove-fastq-after-run` if the user opted into post-run cleanup in Step 1.
 
+**If the user picked from the database cache** (or saved a new entry to it) in Step 4:
 ```
 python3 scripts/render_submission.py \
   --slurm-config ./metascope-microbiome/SLURM_directives.yaml \
@@ -216,6 +223,21 @@ python3 scripts/render_submission.py \
   --output-dir <run_dir> \
   [--remove-fastq-after-run]
 ```
+
+**If the user declined to cache** : omit `--db-config` and `--database` entirely; supply the paths via `--db-*` flags instead:
+```
+python3 scripts/render_submission.py \
+  --slurm-config ./metascope-microbiome/SLURM_directives.yaml \
+  --db-index-dir <…> --db-target <…> \
+  [--db-filter <…>] \
+  --db-accession-path <…> --db-blast-path <…> \
+  --runs-list <run_dir>/runs.txt \
+  --samplesheet <run_dir>/samplesheet.csv \
+  --fastq-dir <run_dir>/fastq \
+  --output-dir <run_dir> \
+  [--remove-fastq-after-run]
+```
+
 
 ### Step 7: Preflight
 

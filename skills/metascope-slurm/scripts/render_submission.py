@@ -69,11 +69,18 @@ OUTPUT_NAME = "submit_metascope.sh"
 
 DEFAULT_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "assets"
 
+# Path args we resolve to absolute on parse, so the rendered SLURM script's
+# `cd "$WORK_DIR"` doesn't strand relative paths.
+def abs_path(s: str) -> Path:
+    return Path(s).resolve()
+
+
 # SLURM directive fields. (yaml_key, cli_attr, label, required, default)
 # Matches SKILL.md Step 2 table plus the fields the template needs.
 SLURM_FIELDS = [
     # SKILL.md Step 2 table:
     ("partition",          "partition",          "SLURM --partition",         True,  None),
+    ("job_name",           "job_name",           "Job name",                  False, "metascope-run"),
     ("default_time",       "time",               "Walltime (HH:MM:SS)",       True,  None),
     ("default_mem",        "mem",                "Memory (e.g. 200G)",        True,  None),
     ("default_cpus",       "cpus",               "CPUs per task",             True,  None),
@@ -90,6 +97,10 @@ SLURM_FIELDS = [
     ("pipeline_ref",       "pipeline_ref",       "Pipeline ref",              True,  "nf-core/metascopeprolifer"),
     ("extra_pipeline_args","extra_pipeline_args","Extra `nextflow run` flags",False, ""),
 ]
+
+# YAML-derived path fields we absolutize after merge. Same reason as abs_path:
+# the rendered script `cd`s into WORK_DIR, after which relative paths break.
+SLURM_PATH_FIELDS = ("scratch_dir", "work_dir", "outdir", "log_dir")
 
 # Database fields. (yaml_key, cli_attr, required)
 # `cli_attr` matches the SKILL.md Step 4 flag names verbatim.
@@ -202,11 +213,15 @@ def main() -> int:
     p.add_argument("--log-dir",          help="SLURM stdout/stderr log dir")
 
     # Database
-    p.add_argument("--db-config", required=True, type=Path,
-                   help="YAML registry of databases "
-                        "(e.g. ./metascope-microbiome/databases.yaml).")
-    p.add_argument("--database", required=True,
-                   help="Key into the registry (e.g. silva_138, custom).")
+    p.add_argument("--db-config", type=Path, default=None,
+                   help="Optional. YAML registry of databases "
+                        "(e.g. ./metascope-microbiome/databases.yaml). Omit "
+                        "for one-off runs where the user opted not to cache; "
+                        "in that case supply every required --db-* flag below.")
+    p.add_argument("--database", default="custom",
+                   help="Key into the registry (e.g. silva_138). Defaults to "
+                        "'custom' for ad-hoc runs without --db-config; appears "
+                        "as a label in the rendered script's header comment.")
     p.add_argument("--db-index-dir",      help="Override metascope_index_dir")
     p.add_argument("--db-target",         help="Override metascope_target")
     p.add_argument("--db-filter",         help="Override metascope_filter (optional)")
@@ -217,11 +232,13 @@ def main() -> int:
     p.add_argument("--template-dir", type=Path, default=DEFAULT_TEMPLATE_DIR,
                    help=f"Directory containing {TEMPLATE_NAME} "
                         f"(default: {DEFAULT_TEMPLATE_DIR})")
-    p.add_argument("--runs-list", required=True, type=Path)
-    p.add_argument("--samplesheet", required=True, type=Path)
-    p.add_argument("--fastq-dir", required=True, type=Path)
-    p.add_argument("--job-name", default="metascope-run")
-    p.add_argument("--output-dir", required=True, type=Path,
+    p.add_argument("--runs-list", required=True, type=abs_path)
+    p.add_argument("--samplesheet", required=True, type=abs_path)
+    p.add_argument("--fastq-dir", required=True, type=abs_path)
+    p.add_argument("--job-name", default=None,
+                   help="Override job_name from YAML. Default 'metascope-run' "
+                        "applies only when neither YAML nor CLI sets it.")
+    p.add_argument("--output-dir", required=True, type=abs_path,
                    help=f"Directory to write {OUTPUT_NAME} into.")
     p.add_argument("--array-concurrency", type=int, default=None,
                    help="Optional cap on concurrent array tasks "
@@ -256,9 +273,20 @@ def main() -> int:
     # 2. Merge YAML defaults with CLI overrides
     slurm, slurm_errors = merge_slurm(yaml_defaults, args)
 
+    # Absolutize YAML-derived paths so `cd "$WORK_DIR"` in the rendered
+    # SLURM script doesn't strand relative path references.
+    for k in SLURM_PATH_FIELDS:
+        v = slurm.get(k)
+        if v:
+            slurm[k] = str(Path(v).resolve())
+
     # 3. Resolve database
     db_cli_overrides = {yk: getattr(args, attr) for yk, attr, _ in DB_FIELDS}
-    registry = load_yaml(args.db_config)
+    if args.db_config is None:
+        registry = {}            # ad-hoc run; resolve_database falls through
+                                 # to the all-CLI-overrides path.
+    else:
+        registry = load_yaml(args.db_config)
     db, db_errors = resolve_database(registry, args.database, db_cli_overrides)
 
     all_errors = slurm_errors + db_errors
@@ -298,7 +326,7 @@ def main() -> int:
         "TIME":                slurm["default_time"],
         "MEM":                 slurm["default_mem"],
         "CPUS":                slurm["default_cpus"],
-        "JOB_NAME":            args.job_name,
+        "JOB_NAME":            slurm["job_name"],
         "LOG_DIR":             slurm["log_dir"],
         "MODULE_LOADS":        slurm["module_loads"],
         "PIPELINE_REF":        slurm["pipeline_ref"],

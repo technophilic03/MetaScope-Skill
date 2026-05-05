@@ -21,6 +21,12 @@ import sys
 from pathlib import Path
 
 
+# Resolve to absolute on parse, so paths baked into samplesheet.csv survive
+# the SLURM script's `cd "$WORK_DIR"` step at runtime.
+def abs_path(s: str) -> Path:
+    return Path(s).resolve()
+
+
 def predict_fastq_paths(run: str, layout: str, fastq_dir: Path) -> tuple[str, str]:
     if layout == "paired":
         return (
@@ -34,13 +40,13 @@ def predict_fastq_paths(run: str, layout: str, fastq_dir: Path) -> tuple[str, st
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--expanded-metadata", required=True, type=Path,
+    p.add_argument("--expanded-metadata", required=True, type=abs_path,
                    help="Path to expanded_metadata.csv (output of validate_inputs.py --output)")
-    p.add_argument("--fastq-dir", required=True, type=Path,
+    p.add_argument("--fastq-dir", required=True, type=abs_path,
                    help="Directory where fastq-dump will place downloaded FASTQs")
-    p.add_argument("--samplesheet", required=True, type=Path,
+    p.add_argument("--samplesheet", required=True, type=abs_path,
                    help="Output: nf-core samplesheet (sample,fastq_1,fastq_2)")
-    p.add_argument("--runs", required=True, type=Path,
+    p.add_argument("--runs", required=True, type=abs_path,
                    help="Output: unique run accessions, one per line")
     args = p.parse_args()
 
