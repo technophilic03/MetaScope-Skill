@@ -72,11 +72,11 @@ Claude will walk you through six stages, regardless of where you're running:
 ```
 Example database paths:
 
-Bowtie2: /home/yl2800/wejlab/reflib/2024_blast_16S_bt; 
+Bowtie2: /<path-to-project-or-home/reflib/2024_blast_16S_bt; 
 
-Path to accessiontaxa: /home/yl2800/wejlab/reflib/2024_accession_taxa 
+Path to accessiontaxa: /<path-to-project-or-home/reflib/2024_accession_taxa 
 
-BLAST: /home/yl2800/wejlab/reflib/2024_blast_16S/16S_ribosomal_RNA  
+BLAST: /<path-to-project-or-home/reflib/2024_blast_16S/16S_ribosomal_RNA  
 # Important: the format is <folder_dir>/<basename>. basename is the file name without extension name (.ndb, .nhr, etc.)
 
 Target index name: 16S_ribosomal_RNA
