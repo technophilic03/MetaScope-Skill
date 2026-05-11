@@ -42,9 +42,10 @@ Inside a Claude Code session, use the following command to install the skill:
 ```
 Alternatively, you can install the skill interactively by entering `/plugin`, go to `Marketplaces` tab and `+ Add Marketplaces`, then enter `technophilic03/MetaScope-Skill` as the marketplace source.
 
+## Update
+To pick up updates of the skill later, you can run `/plugin marketplace update` or update interactively under the `Marketplaces` tab.
 
-To pick up updates of the skill later, you can run `/plugin marketplace update` or update interactively under the `Marketplaces` tab:
->Note May/2026: Current Claude Code can load stale cached version of skills even though the user updated. To make sure the skill is up-to-date, prompt Claude NOT to use the stale version (e.g. `"Make sure the skill is updated. Self-check: DONOT use stale cached version"`). Fix in progress.
+Note May/2026: Current Claude Code can load stale cached version of skills even though the user updated. To make sure the skill is up-to-date, prompt Claude NOT to use the stale version (e.g. `"Make sure the skill is updated. Self-check: DONOT use stale cached version"`). Fix in progress.
 
 
 ## Usage
