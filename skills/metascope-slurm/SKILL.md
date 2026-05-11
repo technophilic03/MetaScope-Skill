@@ -153,7 +153,11 @@ If the validator complains that an accession isn't a run, expansion was missed i
 Outputs:
 - `<run_dir>/expanded_metadata.csv` — validated run-level metadata (`sample_id, run_accession, library_layout`).
 
-**Multi-run-per-sample.** The validator allows the same `sample_id` on multiple rows when one biosample has multiple runs (`(sample_id, accession)` pairs must still be unique). Downstream, the samplesheet has matching `sample` values across rows with different fastq paths — the nf-core "multiple lanes per sample" pattern; the Nextflow pipeline merges these per sample.
+**Multi-run-per-sample.** The validator allows the same `sample_id` on multiple rows when one biosample has multiple runs (`(sample_id, accession)` pairs must still be unique). The MetaScope pipeline's `.groupTuple()` then collapses these rows into a single per-sample channel entry whose `reads` field is a list — and Trimmomatic crashes because it gets two FASTQs as positional args. The skill handles this at Step 5 with two modes (asked of the user when duplicates exist):
+- **merge** (recommended for SRA technical replicates — same `SampleName`/`BioSample` across runs): one samplesheet row per sample; runs concatenated into `<sample>.merged_1.fastq.gz` (and `_2` for paired) by the rendered SLURM script before Nextflow launches. gzip is concat-safe. Output: one taxonomy profile per biosample.
+- **split**: one samplesheet row per run; duplicate `sample_id` values are disambiguated to `<sample_id>_<run_accession>`; singletons keep their original `sample_id`. No merging, no `merges.tsv`. Output: one taxonomy profile per run — pick this when runs are genuinely separate (e.g. different libraries from the same biosample, or QC comparison of replicates).
+
+Per-sample layout consistency is required regardless of mode — a `sample_id` whose runs mix `single` and `paired` is rejected as a metadata bug.
 
 ### Step 4: Resolve database (interactive)
 
@@ -208,15 +212,28 @@ Paths are user-supplied and optionally cached at `./metascope-microbiome/databas
    **If the user declines to save**, that's a clean code path — *do not* write a stub YAML to disk just to satisfy the renderer. In Step 6, omit `--db-config` entirely and pass all collected paths via `--db-*` flags. The renderer treats this as an ad-hoc run and uses `custom` as the database label in the rendered script's header comment.
 
 ### Step 5: Build samplesheet + runs list
-To build the samplesheet for Nextflow input and run list for array rendering, use `scripts/build_samplesheet.py`. Pass the same `--fastq-dir` the user picked in Step 1 (default `<run_dir>/fastq`):
+
+**5a. Decide multi-run handling (only when needed).** Scan `expanded_metadata.csv`: count how many distinct `sample_id` values appear on more than one row. If any do, use `AskUserQuestion` to let the user pick:
+- **Merge into one sample per biosample (Recommended)** — for SRA technical replicates (same `SampleName`/`BioSample` across runs). Concatenates per-run FASTQs into a single per-sample file. One taxonomy profile per biosample.
+- **Keep each run as a separate sample** — disambiguates `sample_id` to `<sample_id>_<run_accession>`. One taxonomy profile per run; pick this for QC comparison or when runs are different libraries.
+
+Mark merge as `(Recommended)` and list it first. If no `sample_id` appears more than once, **skip this question** — the choice is a no-op and the default `merge` mode works for both. Then pass the answer as `--multi-run-mode merge|split` in 5b.
+
+**5b. Build.** Pass the same `--fastq-dir` the user picked in Step 1 (default `<run_dir>/fastq`):
 ```
 python3 scripts/build_samplesheet.py \
   --expanded-metadata <run_dir>/expanded_metadata.csv \
   --fastq-dir <run_dir>/fastq \
   --samplesheet <run_dir>/samplesheet.csv \
-  --runs <run_dir>/runs.txt
+  --runs <run_dir>/runs.txt \
+  --multi-run-mode merge   # or split, from 5a; omit if you want the merge default
 ```
-Predicts paths like `<run_dir>/fastq/<RUN>_1.fastq.gz` (or wherever the user put `--fastq-dir`) and writes both the nf-core samplesheet and a `runs.txt` (unique runs, one per line). Point the user to both files for sanity-checking.
+Outputs:
+- `samplesheet.csv` — one row per sample (merge mode) or one row per run with disambiguated sample_ids (split mode). FASTQ paths point at per-run `<RUN>_1.fastq.gz` for singletons, or `<sample>.merged_1.fastq.gz` for merged multi-run samples. Merged files don't yet exist on disk — the SLURM script assembles them before Nextflow runs.
+- `runs.txt` — unique runs, one per line (drives the array task index).
+- `merges.tsv` — TSV merge plan (`output<TAB>inputs`, comma-separated absolute paths). Only written in merge mode AND when at least one sample has multiple runs. The rendered SLURM script reads this at runtime and concatenates per-run FASTQs into the per-sample merged paths.
+
+Point the user to all three files (or two, in split mode / no-duplicates case) for sanity-checking.
 
 ### Step 6: Render submission script
 
@@ -298,6 +315,7 @@ sbatch <run_dir>/submit_metascope.sh
 - `disk full` after fetching a few SRRs: `--fastq-dir` is on a quota-limited filesystem — point it at scratch.
 - Empty FASTQs: the run is access-controlled (dbGaP). The skill won't bypass authorization; check with NCBI.
 - Preflight `samplesheet references files not on disk` for single-end runs pointing at `<SRR>.fastq.gz` (no `_1`): the samplesheet was built with an older `build_samplesheet.py` that predicted the wrong single-end name. `fastq-dump --split-files` emits `<SRR>_1.fastq.gz` even for single-end. Re-run Step 5 with the current builder, then re-submit (the fetch step is idempotent).
+- Trimmomatic dies with `Unknown trimmer: <sample>.SE.paired.trim.fastq.gz` (or analogous PE message): a sample has more than one run and the pipeline received both per-run FASTQs as positional args because neither pre-merging nor per-run sample-renaming happened. Re-run Step 5 with either `--multi-run-mode merge` (default; produces `merges.tsv`) or `--multi-run-mode split` (one row per run), re-render, then re-submit.
 - Pipeline error: check the log for the failing task. **Do not edit the nf-core/metascopeprolifer pipeline source**; report bugs there. The skill's role ends at producing a valid submission.
 
 ## Outputs

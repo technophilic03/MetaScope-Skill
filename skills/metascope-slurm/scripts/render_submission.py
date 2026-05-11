@@ -235,6 +235,13 @@ def main() -> int:
     p.add_argument("--runs-list", required=True, type=abs_path)
     p.add_argument("--samplesheet", required=True, type=abs_path)
     p.add_argument("--fastq-dir", required=True, type=abs_path)
+    p.add_argument("--merges-file", type=abs_path, default=None,
+                   help="Path to merges.tsv produced by build_samplesheet.py "
+                        "for samples with multiple runs. Defaults to "
+                        "<samplesheet dir>/merges.tsv. The rendered script "
+                        "checks for the file at runtime and skips merging if "
+                        "it does not exist, so it is safe to leave the default "
+                        "even when no merges are needed.")
     p.add_argument("--job-name", default=None,
                    help="Override job_name from YAML. Default 'metascope-run' "
                         "applies only when neither YAML nor CLI sets it.")
@@ -337,6 +344,7 @@ def main() -> int:
         "RUNS_LIST":           str(args.runs_list),
         "FASTQ_DIR":           str(args.fastq_dir),
         "SAMPLESHEET":         str(args.samplesheet),
+        "MERGES_FILE":         str(args.merges_file or (args.samplesheet.parent / "merges.tsv")),
         "DATABASE_KEY":        args.database,
         "DB_INDEX_DIR":        db["metascope_index_dir"],
         "DB_TARGET":           db["metascope_target"],

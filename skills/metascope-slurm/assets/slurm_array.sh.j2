@@ -32,6 +32,7 @@ export MODULEPATH=$MODULEPATH:/projects/community/modulefiles
 RUNS_LIST="{{ RUNS_LIST }}"
 FASTQ_DIR="{{ FASTQ_DIR }}"
 SAMPLESHEET="{{ SAMPLESHEET }}"
+MERGES_FILE="{{ MERGES_FILE }}"
 WORK_DIR="{{ WORK_DIR }}"
 OUTDIR="{{ OUTDIR }}"
 LOG_DIR="{{ LOG_DIR }}"
@@ -81,6 +82,26 @@ fi
     fi
 
     cd "$WORK_DIR"
+
+    # Concatenate per-run FASTQs into per-sample merged files when the same
+    # sample has >1 runs. gzip is concat-safe, so `cat a.gz b.gz > merged.gz`
+    # is a valid gzip stream. Idempotent: skip outputs that already exist
+    # non-empty (re-submissions, partial recovery).
+    if [[ -f "$MERGES_FILE" ]]; then
+        echo "[$(date)] Processing merges from $MERGES_FILE"
+        # tail -n +2 strips the TSV header line.
+        tail -n +2 "$MERGES_FILE" | while IFS=$'\t' read -r out ins; do
+            [[ -z "$out" || -z "$ins" ]] && continue
+            if [[ -s "$out" ]]; then
+                echo "[$(date)]   skip (already exists, non-empty): $out"
+                continue
+            fi
+            # Convert comma-separated input list to an array.
+            IFS=, read -ra in_arr <<< "$ins"
+            echo "[$(date)]   cat -> $out  (inputs: $ins)"
+            cat "${in_arr[@]}" > "$out"
+        done
+    fi
 
     # Verify every FASTQ the samplesheet references is on disk before launching.
     python3 - <<PY
