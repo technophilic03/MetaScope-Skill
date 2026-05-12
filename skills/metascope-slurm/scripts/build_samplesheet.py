@@ -162,8 +162,12 @@ def main() -> int:
     n_singletons = 0
     n_multi = 0   # multi-run samples (merged or split-renamed depending on mode)
 
+    # lineterminator="\n" forces LF endings. csv.writer's default is "\r\n"
+    # even on Linux; the rendered SLURM script's `read -r out ins` would
+    # leave the trailing \r attached to the last field and bash `cat`
+    # would fail to find e.g. `<run>_1.fastq.gz\r`.
     with args.samplesheet.open("w", newline="") as fout_samplesheet:
-        writer = csv.writer(fout_samplesheet)
+        writer = csv.writer(fout_samplesheet, lineterminator="\n")
         writer.writerow(["sample", "fastq_1", "fastq_2"])
 
         for sid in samples_order:
@@ -205,7 +209,7 @@ def main() -> int:
     # Only write merges.tsv when there's something to merge.
     if merges:
         with merges_path.open("w", newline="") as fout_merges:
-            mw = csv.writer(fout_merges, delimiter="\t")
+            mw = csv.writer(fout_merges, delimiter="\t", lineterminator="\n")
             mw.writerow(["output", "inputs"])
             for output, inputs in merges:
                 mw.writerow([output, ",".join(inputs)])

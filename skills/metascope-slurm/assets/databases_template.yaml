@@ -10,9 +10,14 @@
 #   metascope_accession_path  - path to accessionTaxa.sql                  (required)
 #   metascope_db_path         - path to BLAST database                     (required)
 #
-# Use `~` (YAML null) to omit `metascope_filter` for a database with no host
-# filter. Any other path may NOT be empty for a working entry - the renderer
-# refuses to produce a script with missing required paths.
+# Use `~` (YAML null) to indicate "no host filter" for a database. The
+# renderer translates this to `--metascope_filter "NULL"` in the rendered
+# script — NOT to an omitted flag — because the MetaScope pipeline binds
+# this param to a Nextflow `channel.value` and an unbound channel deadlocks
+# the METASCOPE process. The pipeline's R script accepts the literal string
+# "NULL" as "skip filtering." Any other path may NOT be empty for a
+# working entry; the renderer refuses to produce a script with missing
+# required paths.
 #
 # See SKILL.md Step 4 ("Resolve database") for the interactive flow that
 # populates this file. See references/metascope-nextflow.md for what each

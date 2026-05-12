@@ -47,9 +47,20 @@ module_loads: |
 nextflow_profile:  "singularity"
 
 # What goes into `nextflow run <pipeline_ref> ...` inside the submission script.
-# Defaults to the canonical nf-core shorthand. See references/metascope-nextflow.md
-# if that name fails to resolve - you may need the direct GitHub form.
-pipeline_ref:      "nf-core/metascopeprolifer"
+# Defaults to the technophilic03 fork — it ships an `amarel_overrides.config`
+# that supplies a METASCOPE container (upstream nf-core/metascopeprolifer's
+# METASCOPE module has no container directive, and -profile singularity then
+# tries to run R on the bare host, which deadlocks on Amarel because the
+# system R is too old / missing entirely). Once upstream lands the missing
+# container directive, switch to "nf-core/metascopeprolifer". See
+# references/metascope-nextflow.md for the canonical refs.
+pipeline_ref:      "technophilic03/nf-core-metascopeprolifer"
+
+# Revision passed to `nextflow run -r <revision>`. Required by Nextflow once a
+# pipeline's local checkout exists (otherwise it errors out with
+# "Project is currently stuck on revision: main -- you need to explicitly
+# specify a revision with the option -r"). Branch name or commit SHA.
+pipeline_revision: "main"
 
 # Optional extra `nextflow run` flags, space-separated. Leave empty if none.
 extra_pipeline_args: ""

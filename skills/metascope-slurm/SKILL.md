@@ -194,6 +194,8 @@ Paths are user-supplied and optionally cached at `./metascope-microbiome/databas
 
    **BLAST DB path is a prefix, not a directory or a file.** A BLAST database is a set of files sharing a common basename — e.g., `16S_ribosomal_RNA.nhr`, `.nin`, `.nsq`, `.ndb` in directory `/path/to/2024_blast_16S/`. Pass the directory + basename without extension: `/path/to/2024_blast_16S/16S_ribosomal_RNA`. Passing just the directory, or pointing at a single `.nhr` file, will fail.
 
+   **`metascope_filter` always renders to a non-empty value.** When the user has no host filter, the renderer emits `--metascope_filter "NULL"`. This is deliberate — the MetaScope pipeline binds `metascope_filter` to a Nextflow `channel.value`, and an unbound channel deadlocks the METASCOPE process. The pipeline's R script treats the literal string `"NULL"` as "skip host filtering," so the workaround is harmless. Don't be surprised to see `"NULL"` in the rendered script when the user said "no filter."
+
 4. **Show summary + confirm.** Echo back the resolved 5 paths before rendering.
 
 5. **Offer to save** (only when paths were collected, not picked from cache). Append the entry to `./metascope-microbiome/databases.yaml`, creating the file if it doesn't exist:
@@ -286,14 +288,15 @@ Checks:
 
 **(b) Pipeline dry-run** with `nextflow run -preview` — validates parameters, samplesheet schema, and input file readability against the actual pipeline without launching any compute:
 ```
-nextflow run nf-core/metascopeprolifer -preview \
+nextflow run technophilic03/nf-core-metascopeprolifer -preview -r main \
   -profile singularity \
   --input <run_dir>/samplesheet.csv \
   --outdir <outdir> \
   --metascope_index_dir <…> --metascope_target <…> \
+  --metascope_filter "NULL" \
   --metascope_accession_path <…> --metascope_db_path <…>
 ```
-If `-preview` errors, fix the underlying issue and re-render before proceeding. See `references/metascope-nextflow.md` for which pipeline ref form to use today.
+If `-preview` errors, fix the underlying issue and re-render before proceeding. See `references/metascope-nextflow.md` for which pipeline ref form to use today. Always pass `--metascope_filter` (use `"NULL"` when the database has no host filter) — see Step 4 note on the deadlock workaround.
 
 ### Step 8: Present the sbatch command + post-submission guidance (do NOT submit)
 
@@ -316,7 +319,7 @@ sbatch <run_dir>/submit_metascope.sh
 - Empty FASTQs: the run is access-controlled (dbGaP). The skill won't bypass authorization; check with NCBI.
 - Preflight `samplesheet references files not on disk` for single-end runs pointing at `<SRR>.fastq.gz` (no `_1`): the samplesheet was built with an older `build_samplesheet.py` that predicted the wrong single-end name. `fastq-dump --split-files` emits `<SRR>_1.fastq.gz` even for single-end. Re-run Step 5 with the current builder, then re-submit (the fetch step is idempotent).
 - Trimmomatic dies with `Unknown trimmer: <sample>.SE.paired.trim.fastq.gz` (or analogous PE message): a sample has more than one run and the pipeline received both per-run FASTQs as positional args because neither pre-merging nor per-run sample-renaming happened. Re-run Step 5 with either `--multi-run-mode merge` (default; produces `merges.tsv`) or `--multi-run-mode split` (one row per run), re-render, then re-submit.
-- Pipeline error: check the log for the failing task. **Do not edit the nf-core/metascopeprolifer pipeline source**; report bugs there. The skill's role ends at producing a valid submission.
+- Pipeline error: check the log for the failing task. The skill's default pipeline_ref is `technophilic03/nf-core-metascopeprolifer` (a fork with `amarel_overrides.config` supplying a METASCOPE container that upstream is missing). The skill's role ends at producing a valid submission — patches to pipeline modules belong upstream (hjfan527/nf-core-metascopeprolifer) or in the fork's overrides config, not in the skill.
 
 ## Outputs
 

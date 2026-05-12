@@ -36,8 +36,13 @@ MERGES_FILE="{{ MERGES_FILE }}"
 WORK_DIR="{{ WORK_DIR }}"
 OUTDIR="{{ OUTDIR }}"
 LOG_DIR="{{ LOG_DIR }}"
-MARKER_DIR="$WORK_DIR/.metascope_markers"
 N_RUNS={{ N_RUNS }}
+
+# Per-submission marker dir. Namespaced by SLURM_ARRAY_JOB_ID so that markers
+# from a prior sbatch never get counted in this submission's barrier — that
+# bug let a single task see N stale markers, decide all fetches were done,
+# and run the merge step before the other tasks had even started fetching.
+MARKER_DIR="$WORK_DIR/.metascope_markers/$SLURM_ARRAY_JOB_ID"
 
 mkdir -p "$FASTQ_DIR" "$WORK_DIR" "$OUTDIR" "$LOG_DIR" "$MARKER_DIR"
 
@@ -85,8 +90,9 @@ fi
 
     # Concatenate per-run FASTQs into per-sample merged files when the same
     # sample has >1 runs. gzip is concat-safe, so `cat a.gz b.gz > merged.gz`
-    # is a valid gzip stream. Idempotent: skip outputs that already exist
-    # non-empty (re-submissions, partial recovery).
+    # is a valid gzip stream. Write to a sibling `.partial` then atomic-rename
+    # so a crash mid-cat can never leave a half-written file that the next
+    # invocation would mistake for a finished merge.
     if [[ -f "$MERGES_FILE" ]]; then
         echo "[$(date)] Processing merges from $MERGES_FILE"
         # tail -n +2 strips the TSV header line.
@@ -99,7 +105,10 @@ fi
             # Convert comma-separated input list to an array.
             IFS=, read -ra in_arr <<< "$ins"
             echo "[$(date)]   cat -> $out  (inputs: $ins)"
-            cat "${in_arr[@]}" > "$out"
+            tmp_out="${out}.partial"
+            rm -f "$tmp_out"
+            cat "${in_arr[@]}" > "$tmp_out"
+            mv "$tmp_out" "$out"
         done
     fi
 
@@ -122,8 +131,9 @@ if missing:
 print("samplesheet -> disk: OK")
 PY
 
-    echo "[$(date)] Starting nextflow run (pipeline: {{ PIPELINE_REF }})"
+    echo "[$(date)] Starting nextflow run (pipeline: {{ PIPELINE_REF }}, revision: {{ PIPELINE_REVISION }})"
     nextflow run {{ PIPELINE_REF }} \
+        -r {{ PIPELINE_REVISION }} \
         -profile {{ NEXTFLOW_PROFILE }} \
         -work-dir "$WORK_DIR" \
         -resume \
@@ -131,8 +141,8 @@ PY
         --outdir "$OUTDIR" \
         --metascope_index_dir "{{ DB_INDEX_DIR }}" \
         --metascope_target "{{ DB_TARGET }}" \
-{% if DB_FILTER %}        --metascope_filter "{{ DB_FILTER }}" \
-{% endif %}        --metascope_accession_path "{{ DB_ACCESSION_PATH }}" \
+        --metascope_filter "{{ DB_FILTER }}" \
+        --metascope_accession_path "{{ DB_ACCESSION_PATH }}" \
         --metascope_db_path "{{ DB_BLAST_PATH }}" \
         {{ EXTRA_PIPELINE_ARGS }}
 

@@ -203,8 +203,12 @@ def main() -> int:
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with args.output.open("w", newline="") as f:
+            # lineterminator="\n" — csv module's "\r\n" default would leave a
+            # trailing \r on the last field when downstream bash uses
+            # `read -r`. Force LF to keep cross-tool reads clean.
             writer = csv.DictWriter(
                 f, fieldnames=["sample_id", "run_accession", "library_layout"],
+                lineterminator="\n",
             )
             writer.writeheader()
             for row in rows:

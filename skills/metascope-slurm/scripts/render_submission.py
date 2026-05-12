@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-Render the Rutgers Amarel SLURM submission script for nf-core/metascopeprolifer.
+Render the Rutgers Amarel SLURM submission script for the MetaScope Nextflow
+pipeline (default: technophilic03/nf-core-metascopeprolifer fork, which carries
+an amarel_overrides config that supplies a METASCOPE container).
 
 Emits one file into --output-dir:
 
@@ -94,7 +96,14 @@ SLURM_FIELDS = [
     ("account",            "account",            "SLURM --account (optional)",False, None),
     ("module_loads",       "module_loads",       "module load lines",         True,  None),
     ("nextflow_profile",   "nextflow_profile",   "Nextflow profile",          True,  "singularity"),
-    ("pipeline_ref",       "pipeline_ref",       "Pipeline ref",              True,  "nf-core/metascopeprolifer"),
+    # Default points at the technophilic03 fork — it ships an amarel_overrides
+    # config that injects a METASCOPE container (the upstream module has none,
+    # which deadlocks on -profile singularity since Amarel has no host R+BLAST
+    # toolchain). When upstream nf-core/metascopeprolifer fixes the missing
+    # container directive, switch this default back. See references/metascope-
+    # nextflow.md for the canonical refs and why the fork exists.
+    ("pipeline_ref",       "pipeline_ref",       "Pipeline ref",              True,  "technophilic03/nf-core-metascopeprolifer"),
+    ("pipeline_revision",  "pipeline_revision",  "Pipeline revision (-r)",    True,  "main"),
     ("extra_pipeline_args","extra_pipeline_args","Extra `nextflow run` flags",False, ""),
 ]
 
@@ -205,7 +214,18 @@ def main() -> int:
     p.add_argument("--cpus",             help="CPUs per task e.g. 16")
     p.add_argument("--module-loads",     help="Multi-line module-load script")
     p.add_argument("--nextflow-profile", help="nf-core profile e.g. singularity")
-    p.add_argument("--pipeline-ref",     help="Pipeline ref e.g. nf-core/metascopeprolifer")
+    p.add_argument("--pipeline-ref",     help="Pipeline ref. Defaults to "
+                                              "technophilic03/nf-core-metascopeprolifer "
+                                              "(fork with amarel_overrides config that "
+                                              "supplies a METASCOPE container). Override "
+                                              "to hjfan527/nf-core-metascopeprolifer or "
+                                              "nf-core/metascopeprolifer once upstream "
+                                              "declares the missing container directive.")
+    p.add_argument("--pipeline-revision", help="Pipeline revision passed to `nextflow run -r`. "
+                                              "Defaults to 'main'. Nextflow refuses to launch "
+                                              "with `Project is currently stuck on revision: main "
+                                              "— you need to explicitly specify a revision with -r` "
+                                              "unless this is set.")
     p.add_argument("--extra-pipeline-args", help="Extra args appended to `nextflow run`")
     p.add_argument("--scratch-dir",      help="Absolute path to scratch")
     p.add_argument("--work-dir",         help="Nextflow work directory")
@@ -280,6 +300,34 @@ def main() -> int:
     # 2. Merge YAML defaults with CLI overrides
     slurm, slurm_errors = merge_slurm(yaml_defaults, args)
 
+    # Normalize module_loads. YAML accepts two natural shapes for this field:
+    #     module_loads: |
+    #         module load python
+    #         module load nextflow
+    # ...and a block-sequence form:
+    #     module_loads:
+    #       - module load python
+    #       - module load nextflow
+    # The template just `{{ MODULE_LOADS }}`s the value into bash, so if a
+    # list reaches the template Jinja stringifies it as a Python repr
+    # (`['module load python', ...]`) and the resulting script is broken
+    # bash. Accept both forms and coerce a list to newline-joined lines.
+    ml = slurm.get("module_loads")
+    if isinstance(ml, list):
+        if not all(isinstance(x, str) for x in ml):
+            slurm_errors.append(
+                "module_loads is a YAML list but contains non-string entries: "
+                f"{ml!r}. Use either a block-literal scalar (| then indented "
+                "lines) or a list of strings."
+            )
+        else:
+            slurm["module_loads"] = "\n".join(ml)
+    elif ml is not None and not isinstance(ml, str):
+        slurm_errors.append(
+            f"module_loads must be a string (YAML | form) or a list of "
+            f"strings, got {type(ml).__name__}: {ml!r}"
+        )
+
     # Absolutize YAML-derived paths so `cd "$WORK_DIR"` in the rendered
     # SLURM script doesn't strand relative path references.
     for k in SLURM_PATH_FIELDS:
@@ -337,6 +385,7 @@ def main() -> int:
         "LOG_DIR":             slurm["log_dir"],
         "MODULE_LOADS":        slurm["module_loads"],
         "PIPELINE_REF":        slurm["pipeline_ref"],
+        "PIPELINE_REVISION":   slurm["pipeline_revision"],
         "NEXTFLOW_PROFILE":    slurm["nextflow_profile"],
         "WORK_DIR":            slurm["work_dir"],
         "OUTDIR":              slurm["outdir"],
@@ -348,7 +397,13 @@ def main() -> int:
         "DATABASE_KEY":        args.database,
         "DB_INDEX_DIR":        db["metascope_index_dir"],
         "DB_TARGET":           db["metascope_target"],
-        "DB_FILTER":           db.get("metascope_filter") or "",
+        # MetaScope deadlock workaround: when the user has no host filter,
+        # we must STILL emit `--metascope_filter <sentinel>` so the pipeline's
+        # `channel.value(metascope_filter)` binds. Omitting the flag (the
+        # natural-looking "no value" choice) leaves the channel unbound and
+        # the METASCOPE process never fires. The pipeline's R script accepts
+        # the literal string "NULL" as "skip filtering".
+        "DB_FILTER":           db.get("metascope_filter") or "NULL",
         "DB_ACCESSION_PATH":   db["metascope_accession_path"],
         "DB_BLAST_PATH":       db["metascope_db_path"],
         "GENERATED_AT":        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
